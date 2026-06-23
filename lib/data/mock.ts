@@ -44,6 +44,7 @@ export const members: Member[] = memberRows.map(([memberNo, name, company, indus
     memberNo,
     name,
     kana: "",
+    company,
     email: `member${n}@example.com`,
     phone: `011-000-${String(1000 + n)}`,
     facebookUrl: "https://www.facebook.com/",

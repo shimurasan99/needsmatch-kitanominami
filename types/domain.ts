@@ -9,6 +9,7 @@ export type Member = {
   memberNo: string;
   name: string;
   kana: string;
+  company: string;
   email: string;
   phone: string;
   facebookUrl: string;
