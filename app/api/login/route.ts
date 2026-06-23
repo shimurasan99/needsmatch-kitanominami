@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const isAdminLogin = redirect.startsWith("/admin");
   const expectedPassword = isAdminLogin
     ? process.env.ADMIN_SHARED_PASSWORD || "kita1118"
-    : process.env.MEMBER_SHARED_PASSWORD || "kita2026";
+    : process.env.MEMBER_PAGE_PASSWORD || "kita2026";
 
   if (password !== expectedPassword) {
     const url = new URL("/member/login", request.url);
