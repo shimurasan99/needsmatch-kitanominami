@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" role="img" aria-label="交流会のテーブル商談イメージ">
+  <defs>
+    <linearGradient id="wall" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#eef8f5"/>
+      <stop offset="1" stop-color="#cfe8dc"/>
+    </linearGradient>
+    <linearGradient id="table" x1="0" x2="1">
+      <stop stop-color="#1f6b4f"/>
+      <stop offset="1" stop-color="#256d85"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="620" fill="url(#wall)"/>
+  <path d="M0 420c120-70 248-36 380-80 154-51 288-126 520-42v322H0z" fill="#ffffff" opacity=".55"/>
+  <rect x="86" y="78" width="728" height="394" rx="18" fill="#fff" opacity=".86"/>
+  <rect x="132" y="126" width="636" height="266" rx="24" fill="url(#table)"/>
+  <ellipse cx="450" cy="392" rx="300" ry="72" fill="#102a43" opacity=".12"/>
+  <g>
+    <circle cx="255" cy="220" r="48" fill="#102a43"/>
+    <rect x="197" y="276" width="116" height="94" rx="46" fill="#256d85"/>
+    <circle cx="450" cy="185" r="52" fill="#1f6b4f"/>
+    <rect x="388" y="247" width="124" height="102" rx="50" fill="#6b8f3e"/>
+    <circle cx="650" cy="220" r="48" fill="#102a43"/>
+    <rect x="592" y="276" width="116" height="94" rx="46" fill="#256d85"/>
+    <circle cx="350" cy="365" r="46" fill="#1f6b4f"/>
+    <rect x="296" y="414" width="108" height="82" rx="40" fill="#102a43"/>
+    <circle cx="550" cy="365" r="46" fill="#6b8f3e"/>
+    <rect x="496" y="414" width="108" height="82" rx="40" fill="#1f6b4f"/>
+  </g>
+  <rect x="350" y="282" width="200" height="72" rx="14" fill="#fff" opacity=".92"/>
+  <rect x="382" y="306" width="136" height="12" rx="6" fill="#cbd5e1"/>
+  <rect x="406" y="330" width="88" height="10" rx="5" fill="#cbd5e1"/>
+</svg>

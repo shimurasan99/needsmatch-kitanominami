@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: #f5fbff;
+  color: #073763;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-forest focus-visible:ring-offset-2;
+}
+
+.section-kicker {
+  @apply text-xs font-black uppercase tracking-[0.16em] text-forest;
+}
+
+.glass-panel {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(232, 247, 255, 0.9));
+  box-shadow: 0 24px 70px rgba(7, 55, 99, 0.18);
+}
+
+.snow-grid {
+  background-image:
+    linear-gradient(rgba(35, 169, 225, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(35, 169, 225, 0.12) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
