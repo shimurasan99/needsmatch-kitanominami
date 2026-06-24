@@ -1,10 +1,11 @@
 "use client";
 
-import { Crown, RefreshCw } from "lucide-react";
+import { Crown, RefreshCw, Send } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { EditableTableAssignment } from "@/components/table-assignment/editable-table-assignment";
 import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
 import { formatLocalUpdatedAt, storedParticipantsToParticipants, subscribeStoredParticipants } from "@/lib/data/participant-storage";
+import { publishTableAssignment, readPublishedTableAssignment } from "@/lib/data/table-assignment-publication";
 import { generateTableAssignment } from "@/lib/table-assignment/generator";
 import type { AssignmentTable, Member, Participant } from "@/types/domain";
 
@@ -72,10 +73,12 @@ export function TableAssignmentManager({
   const [seatsPerTable, setSeatsPerTable] = useState(initialSeatsPerTable);
   const [draftSeatsPerTable, setDraftSeatsPerTable] = useState(initialSeatsPerTable);
   const [currentAssignment, setCurrentAssignment] = useState<StoredTableAssignment | null>(null);
+  const [publishedAt, setPublishedAt] = useState<string | undefined>();
 
   useEffect(() => {
     setMembers(applyMemberOverrides(initialMembers, readMemberOverrides()));
     setCurrentAssignment(readCurrentAssignment(meetingId));
+    setPublishedAt(readPublishedTableAssignment(meetingId)?.publishedAt);
   }, [initialMembers, meetingId]);
 
   useEffect(() => {
@@ -106,6 +109,12 @@ export function TableAssignmentManager({
     setCurrentAssignment(next);
   }
 
+  function publishCurrentTables() {
+    if (!currentAssignment) return;
+    const published = publishTableAssignment(meetingId, currentAssignment.tables);
+    setPublishedAt(published.publishedAt);
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded border border-slate-200 bg-white p-4 shadow-soft">
@@ -114,8 +123,20 @@ export function TableAssignmentManager({
             <p className="text-sm font-bold text-slate-500">現在のテーブル割り</p>
             <h2 className="mt-1 text-2xl font-black text-deep">保存済みテーブル割り</h2>
             <p className="mt-1 text-sm text-slate-600">最終更新 {formatLocalUpdatedAt(currentAssignment?.updatedAt)}</p>
+            {publishedAt && <p className="mt-1 text-sm font-bold text-forest">公開済み: {formatLocalUpdatedAt(publishedAt)}</p>}
           </div>
-          <div className="rounded bg-snow px-3 py-2 text-sm font-bold text-slate-600">参加設定: {attendeesCount}名</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="rounded bg-snow px-3 py-2 text-sm font-bold text-slate-600">参加設定: {attendeesCount}名</div>
+            <button
+              type="button"
+              onClick={publishCurrentTables}
+              disabled={!currentAssignment}
+              className="focus-ring inline-flex items-center gap-2 rounded bg-accent px-4 py-2 text-sm font-bold text-white shadow-soft hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Send size={16} />
+              公開する
+            </button>
+          </div>
         </div>
 
         {currentAssignment ? (

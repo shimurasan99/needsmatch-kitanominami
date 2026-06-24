@@ -117,7 +117,6 @@ export function EditableTableAssignment({
             <Save size={16} />
             保存
           </button>
-          <button type="button" className="focus-ring rounded border border-slate-200 px-4 py-2 text-sm font-bold">公開切替</button>
           <button type="button" className="focus-ring rounded border border-slate-200 px-4 py-2 text-sm font-bold">PDF出力</button>
           <button type="button" onClick={exportCsv} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 px-4 py-2 text-sm font-bold">
             <FileDown size={16} />
