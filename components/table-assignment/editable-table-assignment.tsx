@@ -4,8 +4,20 @@ import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, Save } from "lucide
 import { useMemo, useState } from "react";
 import type { AssignmentSeat, AssignmentTable } from "@/types/domain";
 
+const tableOrderLabels = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
 function seatKey(seat: AssignmentSeat, index: number) {
   return seat.member?.id ?? `${seat.guestName ?? "guest"}-${index}`;
+}
+
+function sortTables(tables: AssignmentTable[]) {
+  return [...tables].sort((a, b) => tableOrder(a.tableName) - tableOrder(b.tableName));
+}
+
+function tableOrder(tableName: string) {
+  const label = tableName.match(/[A-H]/)?.[0];
+  const index = label ? tableOrderLabels.indexOf(label) : -1;
+  return index >= 0 ? index : 999;
 }
 
 export function EditableTableAssignment({
@@ -21,7 +33,7 @@ export function EditableTableAssignment({
   storageKey: string;
   helperText?: string;
 }) {
-  const [tables, setTables] = useState<AssignmentTable[]>(() => initialTables);
+  const [tables, setTables] = useState<AssignmentTable[]>(() => sortTables(initialTables));
   const [saved, setSaved] = useState(false);
 
   const tableNames = useMemo(() => tables.map((table) => table.tableName), [tables]);
@@ -36,7 +48,7 @@ export function EditableTableAssignment({
       if (!from || !to) return current;
       const [seat] = from.seats.splice(seatIndex, 1);
       if (seat) to.seats.push(seat);
-      return next;
+      return sortTables(next);
     });
   }
 
@@ -49,7 +61,7 @@ export function EditableTableAssignment({
       const targetIndex = seatIndex + delta;
       if (targetIndex < 0 || targetIndex >= table.seats.length) return current;
       [table.seats[seatIndex], table.seats[targetIndex]] = [table.seats[targetIndex], table.seats[seatIndex]];
-      return next;
+      return sortTables(next);
     });
   }
 

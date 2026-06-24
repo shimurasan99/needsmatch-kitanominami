@@ -94,6 +94,18 @@ export const meetings: Meeting[] = [
     status: "終了"
   },
   {
+    id: "meeting-2026-06",
+    title: "2026年6月 北のみなみ月例会",
+    date: "2026-06-19",
+    startTime: "16:00",
+    endTime: "18:00",
+    venueName: "札幌ビジネス交流ラウンジ",
+    venueAddress: "北海道札幌市中央区北1条西1丁目",
+    note: "過去開催分",
+    applicationDeadline: "2026-06-16",
+    status: "終了"
+  },
+  {
     id: "meeting-2026-07",
     title: "2026年7月 北のみなみ月例会",
     date: "2026-07-17",

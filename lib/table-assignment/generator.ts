@@ -32,10 +32,20 @@ export function generateTableAssignment(participants: Participant[], members: Me
       preferred.seats.push(seat);
     });
     const scored = scoreTables(tables, pastTables, targetSize);
-    if (!best || scored.score < best.score) best = scored;
+    if (!best || scored.score < best.score) best = { ...scored, tables: sortTables(scored.tables) };
   }
 
   return best ?? { tables: [], score: 0, warnings: [] };
+}
+
+function sortTables(tables: AssignmentTable[]) {
+  return [...tables].sort((a, b) => tableOrder(a.tableName) - tableOrder(b.tableName));
+}
+
+function tableOrder(tableName: string) {
+  const label = tableName.match(/[A-H]/)?.[0];
+  const index = label ? tableLabels.indexOf(label) : -1;
+  return index >= 0 ? index : 999;
 }
 
 function scoreTables(tables: AssignmentTable[], pastTables: AssignmentTable[], targetSize: number): Result {
