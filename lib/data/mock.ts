@@ -116,73 +116,73 @@ export const participants: Participant[] = [
 export const galleryImages: GalleryImage[] = [
   {
     id: "g1",
-    title: "札幌でリアル開催",
-    description: "北のみなみ支部は札幌すすきのエリアを中心に、毎月第3金曜日に対面で開催しています。",
-    imageUrl: "/images/kitanominami-main.webp",
-    alt: "札幌すすきのと北のみなみ支部のメインビジュアル"
+    title: "6月19日定例会集合写真",
+    description: "この日は34名の方が参加しました！",
+    imageUrl: "/images/gallery/gallery-01.jpg",
+    alt: "6月19日定例会集合写真"
   },
   {
     id: "g2",
-    title: "北のみなみ支部",
-    description: "白、青、水色、赤を基調にした、北海道らしい明るい雰囲気のビジネス交流会です。",
-    imageUrl: "/images/kitanominami-logo.jpg",
-    alt: "北のみなみ支部ロゴ"
+    title: "3月定例会テーブル商談の様子",
+    description: "テーブル内で商談を行っている様子です",
+    imageUrl: "/images/gallery/gallery-02.jpg",
+    alt: "3月定例会テーブル商談の様子"
   },
   {
     id: "g3",
-    title: "月例会のテーブル交流",
-    description: "4〜6人の少人数テーブルで、事業紹介や相談、紹介のきっかけづくりを行います。",
-    imageUrl: "/images/gallery-1.svg",
-    alt: "月例会のテーブル交流"
+    title: "４月４周年定例会テーブル商談の様子①",
+    description: "この日は全国からニーズマッチ会員が集まり、商談が行われました",
+    imageUrl: "/images/gallery/gallery-03.jpg",
+    alt: "４月４周年定例会テーブル商談の様子①"
   },
   {
     id: "g4",
-    title: "はじめての方も参加しやすく",
-    description: "役員が流れを案内し、初参加でも自然に交流へ入れる空気づくりを大切にしています。",
-    imageUrl: "/images/gallery-2.svg",
-    alt: "はじめての方も参加しやすい交流"
+    title: "４月４周年定例会テーブル商談の様子②",
+    description: "この日は全国からニーズマッチ会員が集まり、商談が行われました",
+    imageUrl: "/images/gallery/gallery-04.jpg",
+    alt: "４月４周年定例会テーブル商談の様子②"
   },
   {
     id: "g5",
-    title: "北海道の食を楽しむ懇親",
-    description: "交流会後の会話や懇親も、北海道ならではの楽しみのひとつです。",
-    imageUrl: "/images/gallery-3.svg",
-    alt: "北海道の食を楽しむ懇親"
+    title: "4月４周年定例会集合写真",
+    description: "北のみなみ支部４周年！全国からたくさんのニーズマッチ会員にお集まりいただきました",
+    imageUrl: "/images/gallery/gallery-05.jpg",
+    alt: "4月４周年定例会集合写真"
   },
   {
     id: "g6",
-    title: "ビジネス紹介タイム",
-    description: "自社の強みや今探しているニーズを伝え合い、具体的な紹介につなげます。",
-    imageUrl: "/images/gallery-4.svg",
-    alt: "ビジネス紹介タイム"
+    title: "４周年ゴルフコンペ",
+    description: "道外から来ていただいてる方に、北海道をさらに楽しんでもらうためゴルフコンペも開催されています",
+    imageUrl: "/images/gallery/gallery-06.jpg",
+    alt: "４周年ゴルフコンペ"
   },
   {
     id: "g7",
-    title: "道内外から集まるつながり",
-    description: "北海道でビジネスを広げたい方、北海道が好きな方がつながる場です。",
-    imageUrl: "/images/meeting-scene.svg",
-    alt: "道内外から集まる交流"
+    title: "3月定例会集合写真",
+    description: "新規ゲスト様や他支部からの参加もいただきました",
+    imageUrl: "/images/gallery/gallery-07.jpg",
+    alt: "3月定例会集合写真"
   },
   {
     id: "g8",
-    title: "札幌の街とビジネス",
-    description: "地域の魅力とビジネスの可能性が交わる、北のみなみ支部らしい時間です。",
-    imageUrl: "/images/hero-sapporo.svg",
-    alt: "札幌の街とビジネス交流"
+    title: "カーネギー「人を動かす」のシェア",
+    description: "「人を動かす」の著書からエピソードを紹介し、テーブルごとにディスカッションを行います",
+    imageUrl: "/images/gallery/gallery-08.jpg",
+    alt: "カーネギー「人を動かす」のシェア"
   },
   {
     id: "g9",
-    title: "自然に紹介が生まれる関係性",
-    description: "売り込みではなく、信頼と貢献から次の紹介が生まれる場を目指しています。",
-    imageUrl: "/images/gallery-1.svg",
-    alt: "自然に紹介が生まれる関係性"
+    title: "アイスブレイクタイム",
+    description: "参加者全員の簡単な自己紹介が行われます",
+    imageUrl: "/images/gallery/gallery-09.jpg",
+    alt: "アイスブレイクタイム"
   },
   {
     id: "g10",
-    title: "毎月育っていくコミュニティ",
-    description: "月1回の定例会を重ねながら、会員同士の理解と協力関係を深めていきます。",
-    imageUrl: "/images/gallery-2.svg",
-    alt: "毎月育っていくコミュニティ"
+    title: "定例会の様子",
+    description: "テーブル商談だけでなく、10分間ショートセミナーでお役立ち情報を得られる時間も！",
+    imageUrl: "/images/gallery/gallery-10.jpg",
+    alt: "定例会の様子"
   }
 ];
 

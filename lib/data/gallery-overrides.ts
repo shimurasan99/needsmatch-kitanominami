@@ -2,7 +2,7 @@
 
 import type { GalleryImage } from "@/types/domain";
 
-export const GALLERY_STORAGE_KEY = "nm_gallery_images";
+export const GALLERY_STORAGE_KEY = "nm_gallery_images_v2";
 const GALLERY_UPDATED_EVENT = "nm-gallery-updated";
 
 export function readGalleryImages(fallback: GalleryImage[]) {
