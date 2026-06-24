@@ -63,7 +63,6 @@ export function MemberDirectory({ initialMembers, q, major, role }: { initialMem
               </div>
               <dl className="mt-4 grid gap-2 text-sm">
                 <div><dt className="font-bold text-slate-500">業種</dt><dd>{member.industry}</dd></div>
-                <div><dt className="font-bold text-slate-500">大業種</dt><dd>{member.majorIndustry}</dd></div>
               </dl>
             </Link>
             <div className="mt-4 border-t border-slate-100 pt-4">

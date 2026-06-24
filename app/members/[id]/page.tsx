@@ -17,7 +17,7 @@ export default function MemberDetailPage({ params }: { params: { id: string } })
           <h1 className="mt-2 text-4xl font-black text-deep">{member.name}</h1>
           <p className="mt-2 text-slate-600">{member.kana}</p>
           <div className="mt-5 flex flex-wrap gap-2">
-            {[member.position, member.majorIndustry, member.industry, member.isTableLeader ? "テーブルリーダー" : ""].filter(Boolean).map((tag) => (
+            {[member.position, member.industry, member.isTableLeader ? "テーブルリーダー" : ""].filter(Boolean).map((tag) => (
               <span key={tag} className="rounded bg-green-50 px-3 py-1 text-sm font-bold text-forest">{tag}</span>
             ))}
           </div>

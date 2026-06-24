@@ -4,9 +4,10 @@ import Image from "next/image";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Save } from "lucide-react";
 import { readMemberOverrides, writeMemberOverride } from "@/lib/data/member-overrides";
-import type { Member, RoleName } from "@/types/domain";
+import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
 const roles: RoleName[] = ["主催", "幹事", "準役員", "一般会員"];
+const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
 
 export function MemberEditForm({ member }: { member: Member }) {
   const merged = useMemo(() => ({ ...member, ...(readMemberOverrides()[member.id] ?? {}) }), [member]);
@@ -14,6 +15,7 @@ export function MemberEditForm({ member }: { member: Member }) {
   const [position, setPosition] = useState<RoleName>(merged.position);
   const [isTableLeader, setIsTableLeader] = useState(merged.isTableLeader);
   const [industry, setIndustry] = useState(merged.industry);
+  const [majorIndustry, setMajorIndustry] = useState<MajorIndustry>(merged.majorIndustry);
   const [facebookUrl, setFacebookUrl] = useState(merged.facebookUrl);
   const [instagramUrl, setInstagramUrl] = useState(merged.instagramUrl);
   const [websiteUrl, setWebsiteUrl] = useState(merged.websiteUrl);
@@ -26,6 +28,7 @@ export function MemberEditForm({ member }: { member: Member }) {
     setPosition(next.position);
     setIsTableLeader(next.isTableLeader);
     setIndustry(next.industry);
+    setMajorIndustry(next.majorIndustry);
     setFacebookUrl(next.facebookUrl);
     setInstagramUrl(next.instagramUrl);
     setWebsiteUrl(next.websiteUrl);
@@ -33,7 +36,7 @@ export function MemberEditForm({ member }: { member: Member }) {
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    writeMemberOverride(member.id, { profileImageUrl, position, isTableLeader, industry, facebookUrl, instagramUrl, websiteUrl });
+    writeMemberOverride(member.id, { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl });
     setSaved(true);
   }
 
@@ -62,6 +65,12 @@ export function MemberEditForm({ member }: { member: Member }) {
           <label className="grid gap-2 md:col-span-2">
             <span className="text-sm font-bold text-slate-600">業種</span>
             <input value={industry} onChange={(e) => setIndustry(e.target.value)} className="focus-ring rounded border border-slate-200 px-3 py-3" />
+          </label>
+          <label className="grid gap-2 md:col-span-2">
+            <span className="text-sm font-bold text-slate-600">大業種</span>
+            <select value={majorIndustry} onChange={(e) => setMajorIndustry(e.target.value as MajorIndustry)} className="focus-ring rounded border border-slate-200 px-3 py-3">
+              {majorIndustries.map((item) => <option key={item}>{item}</option>)}
+            </select>
           </label>
           <label className="grid gap-2">
             <span className="text-sm font-bold text-slate-600">Facebook URL</span>
