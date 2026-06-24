@@ -15,14 +15,17 @@ const statusClasses: Record<PastStatus, string> = {
 export function PastDataManager({
   meetings,
   members,
-  assignments
+  assignments,
+  assignmentsByMeetingId
 }: {
   meetings: Meeting[];
   members: Member[];
   assignments: AssignmentTable[];
+  assignmentsByMeetingId?: Record<string, AssignmentTable[]>;
 }) {
   const [activeMeetingId, setActiveMeetingId] = useState(meetings[0]?.id ?? "");
   const activeMeeting = meetings.find((meeting) => meeting.id === activeMeetingId) ?? meetings[0];
+  const activeAssignments = activeMeeting ? (assignmentsByMeetingId?.[activeMeeting.id] ?? assignments) : assignments;
   const [statuses, setStatuses] = useState<Record<string, PastStatus>>(() => Object.fromEntries(members.map((member, index) => [member.id, index < 20 ? "参加" : "欠席"])) as Record<string, PastStatus>);
 
   const attendeeCount = useMemo(() => members.filter((member) => statuses[member.id] === "参加").length, [members, statuses]);
@@ -84,7 +87,8 @@ export function PastDataManager({
           <p className="mt-1 text-sm text-slate-600">メンバー横のプルダウンで別テーブルへ移動し、上下ボタンで順序を変更できます。</p>
         </div>
         <EditableTableAssignment
-          initialTables={assignments}
+          key={activeMeeting.id}
+          initialTables={activeAssignments}
           storageKey={`past-table-assignment-${activeMeeting.id}`}
           helperText={`${activeMeeting.title} の過去テーブル割`}
         />

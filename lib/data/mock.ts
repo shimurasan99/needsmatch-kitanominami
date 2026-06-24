@@ -209,8 +209,34 @@ export const pastAssignments: AssignmentTable[] = [
   { tableName: "Dテーブル", seats: members.slice(15, 20).map((member, i) => ({ member, isLeader: i === 0 })) }
 ];
 
+function seatByName(name: string, guestCompany?: string) {
+  const member = members.find((item) => item.name === name);
+  return {
+    member,
+    guestName: member ? undefined : name,
+    guestCompany,
+    isLeader: Boolean(member?.isTableLeader)
+  };
+}
+
+export const june2026Assignments: AssignmentTable[] = [
+  { tableName: "Aテーブル", seats: ["鈴木 優", "向畑 太輔", "三浦 涼華", "木林 朋之", "中本 怜男"].map((name) => seatByName(name)) },
+  { tableName: "Bテーブル", seats: ["渡辺 穣", "菅咲 伎桂", "浜田 翠", "橋本 啓太", "萩原 新"].map((name) => seatByName(name)) },
+  { tableName: "Cテーブル", seats: ["浅里 綾夏", "髙橋 惺司", "中川 麻衣", "野々村 亮", "岡本 英弥"].map((name) => seatByName(name)) },
+  { tableName: "Dテーブル", seats: [seatByName("伊藤 瞳"), seatByName("石神 亜矢子"), seatByName("髙谷 理佳"), seatByName("立山 大就", "他支部からの参加"), seatByName("坂本 彩")] },
+  { tableName: "Eテーブル", seats: ["中川 裕紀", "野口 貴之", "平澤 裕", "島田 尚幸", "三浦 昂大"].map((name) => seatByName(name)) },
+  { tableName: "Fテーブル", seats: ["井野 俊彦", "吉村 勇紀", "前阪 去枝", "大西 浩之", "八木 悠磨"].map((name) => seatByName(name)) },
+  { tableName: "Gテーブル", seats: [seatByName("亀嶋 有希"), seatByName("佐藤 真由美", "ゲスト参加"), seatByName("渡辺 匠"), seatByName("藤井 善貴")] }
+];
+
+export const pastAssignmentsByMeetingId: Record<string, AssignmentTable[]> = {
+  "meeting-2026-04": pastAssignments,
+  "meeting-2026-05": pastAssignments,
+  "meeting-2026-06": june2026Assignments
+};
+
 export const recentPastAssignments: AssignmentTable[] = [
-  ...pastAssignments,
+  ...june2026Assignments,
   { tableName: "前回Aテーブル", seats: [members[1], members[6], members[11], members[16], members[21]].filter(Boolean).map((member, i) => ({ member, isLeader: i === 0 })) },
   { tableName: "前回Bテーブル", seats: [members[2], members[7], members[12], members[17], members[22]].filter(Boolean).map((member, i) => ({ member, isLeader: i === 0 })) },
   { tableName: "前回Cテーブル", seats: [members[3], members[8], members[13], members[18], members[23]].filter(Boolean).map((member, i) => ({ member, isLeader: i === 0 })) },

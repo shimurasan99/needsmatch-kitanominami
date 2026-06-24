@@ -10,12 +10,14 @@ export function MeetingsManagement({
   meetings,
   members,
   participants,
-  pastAssignments
+  pastAssignments,
+  assignmentsByMeetingId
 }: {
   meetings: Meeting[];
   members: Member[];
   participants: Participant[];
   pastAssignments: AssignmentTable[];
+  assignmentsByMeetingId?: Record<string, AssignmentTable[]>;
 }) {
   const [tab, setTab] = useState<"list" | "past">("list");
   const currentMeetings = meetings.filter((meeting) => meeting.status !== "終了");
@@ -30,7 +32,7 @@ export function MeetingsManagement({
       </div>
 
       {tab === "past" ? (
-        <PastDataManager meetings={pastMeetings} members={members} assignments={pastAssignments} />
+        <PastDataManager meetings={pastMeetings} members={members} assignments={pastAssignments} assignmentsByMeetingId={assignmentsByMeetingId} />
       ) : (
         <div className="grid gap-3">
           {currentMeetings.map((meeting) => (
