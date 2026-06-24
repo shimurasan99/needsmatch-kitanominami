@@ -22,13 +22,15 @@ export function generateTableAssignment(participants: Participant[], members: Me
   let best: Result | null = null;
   const leaders = seats.filter((seat) => seat.member?.isTableLeader);
   const others = seats.filter((seat) => !seat.member?.isTableLeader);
+  const pastPairs = buildPastPairs(pastTables);
 
   for (let i = 0; i < attempts; i++) {
     const tables = Array.from({ length: tableCount }).map((_, index) => ({ tableName: `${tableLabels[index]}テーブル`, seats: [] as AssignmentSeat[] }));
     shuffle([...leaders], i).forEach((seat, index) => tables[index % tableCount].seats.push(seat));
     shuffle([...others], i * 31 + 7).forEach((seat) => {
-      tables.sort((a, b) => a.seats.length - b.seats.length);
-      const preferred = tables.find((table) => table.seats.length < targetSize) ?? tables[0];
+      const candidates = tables.filter((table) => table.seats.length < targetSize);
+      const targetTables = candidates.length > 0 ? candidates : tables;
+      const preferred = [...targetTables].sort((a, b) => scoreSeatForTable(seat, a, targetSize, pastPairs) - scoreSeatForTable(seat, b, targetSize, pastPairs))[0];
       preferred.seats.push(seat);
     });
     const scored = scoreTables(tables, pastTables, targetSize);
@@ -59,7 +61,7 @@ function scoreTables(tables: AssignmentTable[], pastTables: AssignmentTable[], t
       warnings.push(`${table.tableName}: 人数が${table.seats.length}人です（設定: ${targetSize}人）`);
     }
     if (!table.seats.some((seat) => seat.member?.isTableLeader)) {
-      score += 100;
+      score += 300;
       warnings.push(`${table.tableName}: テーブルリーダーがいません`);
     }
     const industryCounts = new Map<string, number>();
@@ -71,7 +73,7 @@ function scoreTables(tables: AssignmentTable[], pastTables: AssignmentTable[], t
       if (seat.member) industryCounts.set(seat.member.majorIndustry, (industryCounts.get(seat.member.majorIndustry) ?? 0) + 1);
     }
     for (const count of industryCounts.values()) {
-      if (count > 1) score += (count - 1) * 20;
+      if (count > 1) score += (count - 1) * 45;
     }
     if (officerCount >= 3) score += 25;
     if (guestCount > 0 && !hasGuide) {
@@ -82,13 +84,32 @@ function scoreTables(tables: AssignmentTable[], pastTables: AssignmentTable[], t
     for (let i = 0; i < ids.length; i++) {
       for (let j = i + 1; j < ids.length; j++) {
         const key = pairKey(ids[i], ids[j]);
-        if (pastPairs.get(key) === "recent") score += 60;
+        if (pastPairs.get(key) === "recent") score += 140;
         if (pastPairs.get(key) === "older") score += 35;
       }
     }
   }
 
   return { tables, score, warnings };
+}
+
+function scoreSeatForTable(seat: AssignmentSeat, table: AssignmentTable, targetSize: number, pastPairs: Map<string, "recent" | "older">) {
+  let score = table.seats.length * 8;
+  if (table.seats.length >= targetSize) score += 120;
+
+  if (seat.member) {
+    const sameIndustryCount = table.seats.filter((item) => item.member?.majorIndustry === seat.member?.majorIndustry).length;
+    score += sameIndustryCount * 45;
+
+    for (const currentSeat of table.seats) {
+      if (!currentSeat.member) continue;
+      const pair = pastPairs.get(pairKey(seat.member.id, currentSeat.member.id));
+      if (pair === "recent") score += 140;
+      if (pair === "older") score += 35;
+    }
+  }
+
+  return score;
 }
 
 function buildPastPairs(pastTables: AssignmentTable[]) {

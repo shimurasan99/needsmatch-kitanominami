@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, Save } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AssignmentSeat, AssignmentTable } from "@/types/domain";
 
 const tableOrderLabels = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -25,18 +25,25 @@ export function EditableTableAssignment({
   score,
   warnings,
   storageKey,
-  helperText
+  helperText,
+  onSave
 }: {
   initialTables: AssignmentTable[];
   score?: number;
   warnings?: string[];
   storageKey: string;
   helperText?: string;
+  onSave?: (tables: AssignmentTable[], updatedAt: string) => void;
 }) {
   const [tables, setTables] = useState<AssignmentTable[]>(() => sortTables(initialTables));
   const [saved, setSaved] = useState(false);
 
   const tableNames = useMemo(() => tables.map((table) => table.tableName), [tables]);
+
+  useEffect(() => {
+    setTables(sortTables(initialTables));
+    setSaved(false);
+  }, [initialTables]);
 
   function moveSeat(fromTableName: string, seatIndex: number, toTableName: string) {
     if (fromTableName === toTableName) return;
@@ -66,7 +73,9 @@ export function EditableTableAssignment({
   }
 
   function saveTables() {
-    window.localStorage.setItem(storageKey, JSON.stringify(tables));
+    const updatedAt = new Date().toISOString();
+    window.localStorage.setItem(storageKey, JSON.stringify({ tables, updatedAt }));
+    onSave?.(tables, updatedAt);
     setSaved(true);
   }
 

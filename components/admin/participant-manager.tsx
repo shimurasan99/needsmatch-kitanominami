@@ -1,8 +1,9 @@
 "use client";
 
-import { Download, Eye, Plus, Trash2, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { Download, Eye, Plus, Save, Table2, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { participantStorageKey, readStoredParticipants, writeStoredParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
+import { formatLocalUpdatedAt, participantStorageKey, readStoredParticipants, writeStoredParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
 import type { Member, Participant, ParticipantStatus } from "@/types/domain";
 
 type MemberAttendanceStatus = Extract<ParticipantStatus, "参加" | "欠席" | "未定">;
@@ -60,20 +61,18 @@ export function ParticipantManager({
   const [guestType, setGuestType] = useState<GuestType>("新規");
   const [guestBranchName, setGuestBranchName] = useState("");
   const [isReady, setIsReady] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | undefined>();
+  const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
     const saved = readStoredParticipants(meetingId);
     if (saved) {
       if (saved.statuses) setStatuses({ ...createInitialStatuses(initialMembers, initialParticipants), ...saved.statuses } as Record<string, MemberAttendanceStatus>);
       if (Array.isArray(saved.guests)) setGuests(saved.guests);
+      setLastUpdatedAt(saved.updatedAt);
     }
     setIsReady(true);
   }, [initialMembers, initialParticipants, meetingId, storageKey]);
-
-  useEffect(() => {
-    if (!isReady) return;
-    writeStoredParticipants(meetingId, { statuses, guests });
-  }, [guests, isReady, meetingId, statuses]);
 
   const counts = useMemo(() => {
     return initialMembers.reduce(
@@ -90,6 +89,15 @@ export function ParticipantManager({
 
   function updateStatus(memberId: string, status: MemberAttendanceStatus) {
     setStatuses((current) => ({ ...current, [memberId]: status }));
+    setSavedMessage("");
+  }
+
+  function saveParticipants() {
+    if (!isReady) return;
+    const updatedAt = new Date().toISOString();
+    writeStoredParticipants(meetingId, { statuses, guests, updatedAt });
+    setLastUpdatedAt(updatedAt);
+    setSavedMessage("参加者情報を保存しました。");
   }
 
   function addGuest(event: FormEvent<HTMLFormElement>) {
@@ -113,6 +121,7 @@ export function ParticipantManager({
     setGuestType("新規");
     setGuestBranchName("");
     setIsGuestFormOpen(false);
+    setSavedMessage("");
   }
 
   function exportCsv() {
@@ -139,6 +148,31 @@ export function ParticipantManager({
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-200 bg-white p-4 shadow-soft">
+        <div>
+          <p className="text-sm font-bold text-slate-500">最終更新</p>
+          <p className="text-xl font-black text-deep">{formatLocalUpdatedAt(lastUpdatedAt)}</p>
+          {savedMessage && <p className="mt-1 text-sm font-bold text-forest">{savedMessage}</p>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={saveParticipants}
+            className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white hover:bg-deep"
+          >
+            <Save size={16} />
+            保存
+          </button>
+          <Link
+            href={`/admin/meetings/${meetingId}/table-assignments`}
+            className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-deep hover:bg-snow"
+          >
+            <Table2 size={16} />
+            テーブル割りへ
+          </Link>
+        </div>
+      </div>
+
       <div className="grid gap-3 rounded border border-slate-200 bg-white p-4 shadow-soft sm:grid-cols-4">
         <Stat label="参加" value={`${counts.参加 + guests.length}名`} className="text-forest" />
         <Stat label="欠席" value={`${counts.欠席}名`} className="text-accent" />
