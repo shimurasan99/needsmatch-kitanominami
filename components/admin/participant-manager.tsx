@@ -2,19 +2,13 @@
 
 import { Download, Eye, Plus, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { participantStorageKey, readStoredParticipants, writeStoredParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
 import type { Member, Participant, ParticipantStatus } from "@/types/domain";
 
 type MemberAttendanceStatus = Extract<ParticipantStatus, "参加" | "欠席" | "未定">;
 type GuestType = "新規" | "他支部";
 
-type GuestEntry = {
-  id: string;
-  name: string;
-  company: string;
-  industry: string;
-  type: GuestType;
-  branchName: string;
-};
+type GuestEntry = StoredGuestEntry;
 
 const statusOptions: MemberAttendanceStatus[] = ["参加", "欠席", "未定"];
 
@@ -55,7 +49,7 @@ export function ParticipantManager({
   initialMembers: Member[];
   initialParticipants: Participant[];
 }) {
-  const storageKey = `nm_meeting_participants_${meetingId}`;
+  const storageKey = participantStorageKey(meetingId);
   const [statuses, setStatuses] = useState<Record<string, MemberAttendanceStatus>>(() => createInitialStatuses(initialMembers, initialParticipants));
   const [guests, setGuests] = useState<GuestEntry[]>([]);
   const [isGuestFormOpen, setIsGuestFormOpen] = useState(false);
@@ -68,23 +62,18 @@ export function ParticipantManager({
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
+    const saved = readStoredParticipants(meetingId);
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as { statuses?: Record<string, MemberAttendanceStatus>; guests?: GuestEntry[] };
-        if (parsed.statuses) setStatuses({ ...createInitialStatuses(initialMembers, initialParticipants), ...parsed.statuses });
-        if (Array.isArray(parsed.guests)) setGuests(parsed.guests);
-      } catch {
-        setStatuses(createInitialStatuses(initialMembers, initialParticipants));
-      }
+      if (saved.statuses) setStatuses({ ...createInitialStatuses(initialMembers, initialParticipants), ...saved.statuses } as Record<string, MemberAttendanceStatus>);
+      if (Array.isArray(saved.guests)) setGuests(saved.guests);
     }
     setIsReady(true);
-  }, [initialMembers, initialParticipants, storageKey]);
+  }, [initialMembers, initialParticipants, meetingId, storageKey]);
 
   useEffect(() => {
     if (!isReady) return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ statuses, guests }));
-  }, [guests, isReady, statuses, storageKey]);
+    writeStoredParticipants(meetingId, { statuses, guests });
+  }, [guests, isReady, meetingId, statuses]);
 
   const counts = useMemo(() => {
     return initialMembers.reduce(

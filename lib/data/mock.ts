@@ -196,3 +196,11 @@ export const pastAssignments: AssignmentTable[] = [
   { tableName: "Cテーブル", seats: members.slice(10, 15).map((member, i) => ({ member, isLeader: i === 0 })) },
   { tableName: "Dテーブル", seats: members.slice(15, 20).map((member, i) => ({ member, isLeader: i === 0 })) }
 ];
+
+export const recentPastAssignments: AssignmentTable[] = [
+  ...pastAssignments,
+  { tableName: "前回Aテーブル", seats: [members[1], members[6], members[11], members[16], members[21]].filter(Boolean).map((member, i) => ({ member, isLeader: i === 0 })) },
+  { tableName: "前回Bテーブル", seats: [members[2], members[7], members[12], members[17], members[22]].filter(Boolean).map((member, i) => ({ member, isLeader: i === 0 })) },
+  { tableName: "前回Cテーブル", seats: [members[3], members[8], members[13], members[18], members[23]].filter(Boolean).map((member, i) => ({ member, isLeader: i === 0 })) },
+  { tableName: "前回Dテーブル", seats: [members[4], members[9], members[14], members[19], members[24]].filter(Boolean).map((member, i) => ({ member, isLeader: i === 0 })) }
+];

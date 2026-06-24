@@ -83,11 +83,11 @@ function scoreTables(tables: AssignmentTable[], pastTables: AssignmentTable[], t
 
 function buildPastPairs(pastTables: AssignmentTable[]) {
   const pairs = new Map<string, "recent" | "older">();
-  pastTables.forEach((table, tableIndex) => {
+  pastTables.forEach((table) => {
     const ids = table.seats.map((seat) => seat.member?.id).filter(Boolean) as string[];
     for (let i = 0; i < ids.length; i++) {
       for (let j = i + 1; j < ids.length; j++) {
-        pairs.set(pairKey(ids[i], ids[j]), tableIndex < 2 ? "recent" : "older");
+        pairs.set(pairKey(ids[i], ids[j]), "recent");
       }
     }
   });
