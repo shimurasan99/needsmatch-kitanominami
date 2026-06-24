@@ -24,8 +24,8 @@ function readCurrentAssignment(meetingId: string): StoredTableAssignment | null 
     const raw = window.localStorage.getItem(currentAssignmentStorageKey(meetingId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredTableAssignment | AssignmentTable[];
-    if (Array.isArray(parsed)) return { tables: parsed, updatedAt: "" };
-    if (parsed && Array.isArray(parsed.tables)) return parsed;
+    if (Array.isArray(parsed)) return { tables: normalizeTableNames(parsed), updatedAt: "" };
+    if (parsed && Array.isArray(parsed.tables)) return { ...parsed, tables: normalizeTableNames(parsed.tables) };
     return null;
   } catch {
     return null;
@@ -34,6 +34,24 @@ function readCurrentAssignment(meetingId: string): StoredTableAssignment | null 
 
 function writeCurrentAssignment(meetingId: string, value: StoredTableAssignment) {
   window.localStorage.setItem(currentAssignmentStorageKey(meetingId), JSON.stringify(value));
+}
+
+function normalizeTableNames(tables: AssignmentTable[]) {
+  return tables.map((table, index) => {
+    if (/^[A-Z]+テーブル$/.test(table.tableName)) return table;
+    return { ...table, tableName: `${tableLabel(index)}テーブル` };
+  });
+}
+
+function tableLabel(index: number) {
+  let value = index + 1;
+  let label = "";
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
 }
 
 export function TableAssignmentManager({

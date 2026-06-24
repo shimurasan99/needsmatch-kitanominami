@@ -4,8 +4,6 @@ import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, Save } from "lucide
 import { useEffect, useMemo, useState } from "react";
 import type { AssignmentSeat, AssignmentTable } from "@/types/domain";
 
-const tableOrderLabels = ["A", "B", "C", "D", "E", "F", "G", "H"];
-
 function seatKey(seat: AssignmentSeat, index: number) {
   return seat.member?.id ?? `${seat.guestName ?? "guest"}-${index}`;
 }
@@ -15,9 +13,12 @@ function sortTables(tables: AssignmentTable[]) {
 }
 
 function tableOrder(tableName: string) {
-  const label = tableName.match(/[A-H]/)?.[0];
-  const index = label ? tableOrderLabels.indexOf(label) : -1;
-  return index >= 0 ? index : 999;
+  const label = tableName.match(/^[A-Z]+/)?.[0];
+  return label ? labelToIndex(label) : 999;
+}
+
+function labelToIndex(label: string) {
+  return label.split("").reduce((acc, character) => acc * 26 + character.charCodeAt(0) - 64, 0) - 1;
 }
 
 export function EditableTableAssignment({

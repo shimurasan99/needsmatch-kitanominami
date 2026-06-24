@@ -6,7 +6,6 @@ type Result = {
   warnings: string[];
 };
 
-const tableLabels = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const officerPositions = new Set(["主催", "幹事", "準役員"]);
 
 export function generateTableAssignment(participants: Participant[], members: Member[], pastTables: AssignmentTable[] = [], attempts = 600, seatsPerTable = 5): Result {
@@ -25,7 +24,7 @@ export function generateTableAssignment(participants: Participant[], members: Me
   const pastPairs = buildPastPairs(pastTables);
 
   for (let i = 0; i < attempts; i++) {
-    const tables = Array.from({ length: tableCount }).map((_, index) => ({ tableName: `${tableLabels[index]}テーブル`, seats: [] as AssignmentSeat[] }));
+    const tables = Array.from({ length: tableCount }).map((_, index) => ({ tableName: `${tableLabel(index)}テーブル`, seats: [] as AssignmentSeat[] }));
     shuffle([...leaders], i).forEach((seat, index) => tables[index % tableCount].seats.push(seat));
     shuffle([...others], i * 31 + 7).forEach((seat) => {
       const candidates = tables.filter((table) => table.seats.length < targetSize);
@@ -45,9 +44,23 @@ function sortTables(tables: AssignmentTable[]) {
 }
 
 function tableOrder(tableName: string) {
-  const label = tableName.match(/[A-H]/)?.[0];
-  const index = label ? tableLabels.indexOf(label) : -1;
-  return index >= 0 ? index : 999;
+  const label = tableName.match(/^[A-Z]+/)?.[0];
+  return label ? labelToIndex(label) : 999;
+}
+
+function tableLabel(index: number) {
+  let value = index + 1;
+  let label = "";
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+}
+
+function labelToIndex(label: string) {
+  return label.split("").reduce((acc, character) => acc * 26 + character.charCodeAt(0) - 64, 0) - 1;
 }
 
 function scoreTables(tables: AssignmentTable[], pastTables: AssignmentTable[], targetSize: number): Result {
