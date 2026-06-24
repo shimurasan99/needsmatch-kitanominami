@@ -13,7 +13,7 @@ export default function HomePage() {
     <>
       <section className="relative overflow-hidden bg-deep text-white">
         <div className="absolute inset-0">
-          <Image src="/images/kitanominami-main.webp" alt="札幌すすきのと北のみなみ支部のメインビジュアル" fill priority className="object-cover" />
+          <Image src="/images/kitanominami-hero-bg.jpg" alt="札幌すすきのの街並み" fill priority className="object-cover" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,55,99,0.94),rgba(0,91,172,0.72)_48%,rgba(35,169,225,0.12))]" />
         </div>
         <div className="relative mx-auto grid min-h-[720px] max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.02fr_0.98fr] lg:px-8">

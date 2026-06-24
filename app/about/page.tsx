@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { GallerySlider } from "@/components/gallery/gallery-slider";
 import { galleryImages } from "@/lib/data/mock";
 
@@ -5,6 +6,16 @@ export default function AboutPage() {
   return (
     <div className="bg-snow">
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mb-10 overflow-hidden rounded border border-slate-200 bg-white shadow-soft">
+          <Image
+            src="/images/kitanominami-page-main.jpg"
+            alt="ニーズマッチ 北のみなみ支部 メインビジュアル"
+            width={1920}
+            height={1080}
+            priority
+            className="aspect-[16/9] w-full object-cover"
+          />
+        </div>
         <p className="text-sm font-bold text-forest">ABOUT NEEDS MATCH</p>
         <h1 className="mt-3 text-4xl font-black text-deep">ニーズマッチと北のみなみ支部</h1>
         <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_1fr]">
