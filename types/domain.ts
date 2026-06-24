@@ -47,6 +47,14 @@ export type Participant = {
   status: ParticipantStatus;
 };
 
+export type GalleryImage = {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  alt: string;
+};
+
 export type AssignmentSeat = {
   member?: Member;
   guestName?: string;

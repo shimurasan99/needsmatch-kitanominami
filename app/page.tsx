@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { CalendarDays, CheckCircle2, Handshake, MapPin, MountainSnow, Sparkles, UsersRound } from "lucide-react";
+import { GallerySlider } from "@/components/gallery/gallery-slider";
 import { ButtonLink } from "@/components/ui/button-link";
 import { galleryImages, meetings, members } from "@/lib/data/mock";
 
@@ -108,14 +109,7 @@ export default function HomePage() {
           </div>
           <Link href="/about#gallery" className="text-sm font-bold text-forest">もっと見る</Link>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {galleryImages.map((image) => (
-            <div key={image.id} className="overflow-hidden rounded border border-slate-200 bg-white shadow-soft">
-              <Image src={image.imageUrl} alt={image.alt} width={640} height={420} className="aspect-[4/3] w-full object-cover" />
-              <p className="p-3 text-sm font-semibold">{image.title}</p>
-            </div>
-          ))}
-        </div>
+        <GallerySlider images={galleryImages} />
       </section>
 
       <section className="bg-white py-16">

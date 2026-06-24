@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { GallerySlider } from "@/components/gallery/gallery-slider";
 import { galleryImages } from "@/lib/data/mock";
 
 export default function AboutPage() {
@@ -34,15 +34,9 @@ export default function AboutPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="text-sm font-bold text-forest">GALLERY</p>
           <h2 className="mt-3 text-3xl font-black text-deep">写真ギャラリー</h2>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {galleryImages.map((image) => (
-              <a key={image.id} href={image.imageUrl} target="_blank" rel="noreferrer" className="focus-ring overflow-hidden rounded border border-slate-200 bg-snow">
-                <Image src={image.imageUrl} alt={image.alt} width={800} height={560} className="aspect-[4/3] w-full object-cover" />
-                <p className="p-3 text-sm font-semibold">{image.title}</p>
-              </a>
-            ))}
+          <div className="mt-8">
+            <GallerySlider images={galleryImages} />
           </div>
-          <p className="mt-4 text-sm text-slate-600">画像の追加・削除は運営専用ページのギャラリー管理から行います。</p>
         </div>
       </section>
     </div>

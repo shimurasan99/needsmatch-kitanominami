@@ -1,4 +1,4 @@
-import type { AssignmentTable, MajorIndustry, Meeting, Member, Participant } from "@/types/domain";
+import type { AssignmentTable, GalleryImage, MajorIndustry, Meeting, Member, Participant } from "@/types/domain";
 
 const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
 
@@ -113,11 +113,77 @@ export const participants: Participant[] = [
   { id: "guest-2", meetingId: "meeting-2026-07", guestName: "ゲスト 花子", guestCompany: "サンプル企画", status: "ゲスト" }
 ];
 
-export const galleryImages = [
-  { id: "g1", title: "北のみなみ支部 メインビジュアル", imageUrl: "/images/kitanominami-main.webp", alt: "札幌すすきのと北のみなみ支部のメインビジュアル" },
-  { id: "g2", title: "北のみなみ支部 ロゴ", imageUrl: "/images/kitanominami-logo.jpg", alt: "北のみなみ支部ロゴ" },
-  { id: "g3", title: "北海道の食を楽しむ懇親", imageUrl: "/images/gallery-3.svg", alt: "北海道の食を楽しむ懇親" },
-  { id: "g4", title: "ビジネス紹介タイム", imageUrl: "/images/gallery-4.svg", alt: "ビジネス紹介タイム" }
+export const galleryImages: GalleryImage[] = [
+  {
+    id: "g1",
+    title: "札幌でリアル開催",
+    description: "北のみなみ支部は札幌すすきのエリアを中心に、毎月第3金曜日に対面で開催しています。",
+    imageUrl: "/images/kitanominami-main.webp",
+    alt: "札幌すすきのと北のみなみ支部のメインビジュアル"
+  },
+  {
+    id: "g2",
+    title: "北のみなみ支部",
+    description: "白、青、水色、赤を基調にした、北海道らしい明るい雰囲気のビジネス交流会です。",
+    imageUrl: "/images/kitanominami-logo.jpg",
+    alt: "北のみなみ支部ロゴ"
+  },
+  {
+    id: "g3",
+    title: "月例会のテーブル交流",
+    description: "4〜6人の少人数テーブルで、事業紹介や相談、紹介のきっかけづくりを行います。",
+    imageUrl: "/images/gallery-1.svg",
+    alt: "月例会のテーブル交流"
+  },
+  {
+    id: "g4",
+    title: "はじめての方も参加しやすく",
+    description: "役員が流れを案内し、初参加でも自然に交流へ入れる空気づくりを大切にしています。",
+    imageUrl: "/images/gallery-2.svg",
+    alt: "はじめての方も参加しやすい交流"
+  },
+  {
+    id: "g5",
+    title: "北海道の食を楽しむ懇親",
+    description: "交流会後の会話や懇親も、北海道ならではの楽しみのひとつです。",
+    imageUrl: "/images/gallery-3.svg",
+    alt: "北海道の食を楽しむ懇親"
+  },
+  {
+    id: "g6",
+    title: "ビジネス紹介タイム",
+    description: "自社の強みや今探しているニーズを伝え合い、具体的な紹介につなげます。",
+    imageUrl: "/images/gallery-4.svg",
+    alt: "ビジネス紹介タイム"
+  },
+  {
+    id: "g7",
+    title: "道内外から集まるつながり",
+    description: "北海道でビジネスを広げたい方、北海道が好きな方がつながる場です。",
+    imageUrl: "/images/meeting-scene.svg",
+    alt: "道内外から集まる交流"
+  },
+  {
+    id: "g8",
+    title: "札幌の街とビジネス",
+    description: "地域の魅力とビジネスの可能性が交わる、北のみなみ支部らしい時間です。",
+    imageUrl: "/images/hero-sapporo.svg",
+    alt: "札幌の街とビジネス交流"
+  },
+  {
+    id: "g9",
+    title: "自然に紹介が生まれる関係性",
+    description: "売り込みではなく、信頼と貢献から次の紹介が生まれる場を目指しています。",
+    imageUrl: "/images/gallery-1.svg",
+    alt: "自然に紹介が生まれる関係性"
+  },
+  {
+    id: "g10",
+    title: "毎月育っていくコミュニティ",
+    description: "月1回の定例会を重ねながら、会員同士の理解と協力関係を深めていきます。",
+    imageUrl: "/images/gallery-2.svg",
+    alt: "毎月育っていくコミュニティ"
+  }
 ];
 
 export const messengerThreads = [
