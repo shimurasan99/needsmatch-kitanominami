@@ -1,4 +1,4 @@
-import type { AssignmentTable, GalleryImage, MajorIndustry, Meeting, Member, Participant } from "@/types/domain";
+import type { AssignmentTable, DealResult, GalleryImage, MajorIndustry, Meeting, Member, Participant } from "@/types/domain";
 
 const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
 
@@ -211,6 +211,39 @@ export const galleryImages: GalleryImage[] = [
 
 export const messengerThreads = [
   { id: "thread-1", name: "連絡用スレッド", url: "https://www.facebook.com/messages/t/8306300582745011" }
+];
+
+export const dealResults: DealResult[] = [
+  {
+    id: "deal-1",
+    fromMemberName: "佐藤 正人",
+    toMemberName: "水口 遼人",
+    month: "2026-06",
+    industry: "IT",
+    description: "ホームページ改善と問い合わせ導線の見直しを行い、月例会での相談から正式な制作案件につながりました。",
+    sales: 380000,
+    imageUrl: "/images/kitanominami-page-main.jpg"
+  },
+  {
+    id: "deal-2",
+    fromMemberName: "飛山 佳枝",
+    toMemberName: "西森 菜月",
+    month: "2026-05",
+    industry: "美容",
+    description: "美容サロンの紹介から新規顧客獲得につながり、継続利用を含む商談が成立しました。",
+    sales: 120000,
+    imageUrl: "/images/gallery/gallery-02.jpg"
+  },
+  {
+    id: "deal-3",
+    fromMemberName: "村上 季隆",
+    toMemberName: "佐藤 彰洋",
+    month: "2026-04",
+    industry: "研修",
+    description: "社内研修の相談をきっかけに、営業チーム向けの研修実施が決まりました。",
+    sales: 250000,
+    imageUrl: "/images/gallery/gallery-03.jpg"
+  }
 ];
 
 export const pastAssignments: AssignmentTable[] = [

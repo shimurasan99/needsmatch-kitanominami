@@ -8,6 +8,7 @@ import { useState } from "react";
 const nav = [
   { href: "/about", label: "支部紹介" },
   { href: "/members", label: "会員紹介" },
+  { href: "/deals", label: "商談成立実績" },
   { href: "/entry", label: "参加申し込み" },
   { href: "/join", label: "入会案内" }
 ];
