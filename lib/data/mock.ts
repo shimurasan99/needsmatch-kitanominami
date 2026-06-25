@@ -32,7 +32,8 @@ const memberProfileImages: Record<string, string> = {
   "中川 麻衣": "/images/members/m-nakagawa-mai.png",
   "髙谷 理佳": "/images/members/m-takatani-rika.png",
   "野々村 亮": "/images/members/m-nonomura-ryo.jpg",
-  "橋本 啓太": "/images/members/m-hashimoto-keita.jpg"
+  "橋本 啓太": "/images/members/m-hashimoto-keita.jpg",
+  "渡邊 凌": "/images/members/m-watanabe-ryo.jpg"
 };
 
 const memberRows = [
@@ -78,7 +79,8 @@ const memberRows = [
   ["9714", "坂本 彩", "坂本 彩", "SNS集客サポート・WEBデザイン", "一般会員"],
   ["9715", "萩原 新", "合同会社Riberte/あらた", "ITコンサルタント/Youtuber", "一般会員"],
   ["9710", "島田 尚幸", "株式会社フィールド", "外構工事・遺品整理・特殊清掃", "一般会員"],
-  ["9740", "藤井 善貴", "株式会社エステート221", "不動産業全般", "一般会員"]
+  ["9740", "藤井 善貴", "株式会社エステート221", "不動産業全般", "一般会員"],
+  ["6419", "渡邊 凌", "株式会社ジョンソン", "携帯電話・不動産・自動車", "一般会員"]
 ] as const;
 
 export const members: Member[] = memberRows.map(([memberNo, name, company, industry, position], index) => {
