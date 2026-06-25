@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Download, Eye, Plus, Save, Table2, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { formatLocalUpdatedAt, participantStorageKey, readStoredParticipants, writeStoredParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
+import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import type { Member, Participant, ParticipantStatus } from "@/types/domain";
 
 type MemberAttendanceStatus = Extract<ParticipantStatus, "参加" | "欠席" | "未定">;
@@ -85,7 +86,7 @@ export function ParticipantManager({
   }, [initialMembers, statuses]);
 
   const attendingMembers = useMemo(() => initialMembers.filter((member) => statuses[member.id] === "参加"), [initialMembers, statuses]);
-  const sortedMembers = useMemo(() => [...initialMembers].sort((a, b) => Number(a.memberNo) - Number(b.memberNo)), [initialMembers]);
+  const sortedMembers = useMemo(() => sortMembersForDirectory(initialMembers), [initialMembers]);
   const totalAttendees = attendingMembers.length + guests.length;
 
   function updateStatus(memberId: string, status: MemberAttendanceStatus) {

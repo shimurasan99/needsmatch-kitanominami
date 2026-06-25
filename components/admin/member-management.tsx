@@ -5,9 +5,10 @@ import Link from "next/link";
 import { Download, Plus, Upload } from "lucide-react";
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { readMemberAdditions, readMemberOverrides, writeMemberAdditions, applyMemberOverrides } from "@/lib/data/member-overrides";
+import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
-const roles: RoleName[] = ["主催", "幹事", "準役員", "一般会員"];
+const roles: RoleName[] = ["主催", "事務局長", "幹事", "役員", "支部サポーター", "準役員", "一般会員"];
 const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
 
 export function MemberManagement({ initialMembers }: { initialMembers: Member[] }) {
@@ -25,7 +26,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
     isTableLeader: false
   });
 
-  const sortedMembers = useMemo(() => [...members].sort((a, b) => Number(a.memberNo) - Number(b.memberNo)), [members]);
+  const sortedMembers = useMemo(() => sortMembersForDirectory(members), [members]);
 
   function addMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

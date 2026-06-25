@@ -6,7 +6,7 @@ type Result = {
   warnings: string[];
 };
 
-const officerPositions = new Set(["主催", "幹事", "準役員"]);
+const officerPositions = new Set(["主催", "事務局長", "幹事", "役員", "支部サポーター", "準役員"]);
 
 export function generateTableAssignment(participants: Participant[], members: Member[], pastTables: AssignmentTable[] = [], attempts = 600, seatsPerTable = 5): Result {
   const targetSize = Math.min(Math.max(seatsPerTable, 4), 8);

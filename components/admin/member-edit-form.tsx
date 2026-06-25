@@ -6,7 +6,7 @@ import { Save } from "lucide-react";
 import { readMemberOverrides, writeMemberOverride } from "@/lib/data/member-overrides";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
-const roles: RoleName[] = ["主催", "幹事", "準役員", "一般会員"];
+const roles: RoleName[] = ["主催", "事務局長", "幹事", "役員", "支部サポーター", "準役員", "一般会員"];
 const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
 
 export function MemberEditForm({ member }: { member: Member }) {

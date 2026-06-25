@@ -4,10 +4,11 @@ import { CalendarDays, CheckCircle2, Handshake, MapPin, MountainSnow, Sparkles, 
 import { GallerySlider } from "@/components/gallery/gallery-slider";
 import { ButtonLink } from "@/components/ui/button-link";
 import { galleryImages, meetings, members } from "@/lib/data/mock";
+import { sortMembersForDirectory } from "@/lib/data/member-sort";
 
 export default function HomePage() {
   const nextMeeting = meetings.find((meeting) => meeting.status === "確定") ?? meetings[0];
-  const visibleMembers = members.filter((member) => member.isVisible && member.status === "在籍").slice(0, 4);
+  const visibleMembers = sortMembersForDirectory(members.filter((member) => member.isVisible && member.status === "在籍")).slice(0, 4);
 
   return (
     <>

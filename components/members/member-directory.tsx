@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
+import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import { SocialLinks } from "@/components/members/social-links";
 import type { Member } from "@/types/domain";
 
@@ -16,13 +17,13 @@ export function MemberDirectory({ initialMembers, q, major, role }: { initialMem
   }, [initialMembers]);
 
   const visible = useMemo(() => {
-    return members.filter((member) => {
+    return sortMembersForDirectory(members.filter((member) => {
       if (!member.isVisible || member.status !== "在籍") return false;
       if (q && !`${member.name} ${member.industry}`.includes(q)) return false;
       if (major && member.majorIndustry !== major) return false;
       if (role && member.position !== role) return false;
       return true;
-    }).sort((a, b) => Number(a.memberNo) - Number(b.memberNo));
+    }));
   }, [members, q, major, role]);
 
   return (
@@ -42,7 +43,10 @@ export function MemberDirectory({ initialMembers, q, major, role }: { initialMem
         <select name="role" defaultValue={role} className="focus-ring rounded border border-slate-200 px-3 py-3">
           <option value="">役職すべて</option>
           <option>主催</option>
+          <option>事務局長</option>
           <option>幹事</option>
+          <option>役員</option>
+          <option>支部サポーター</option>
           <option>準役員</option>
           <option>一般会員</option>
         </select>
