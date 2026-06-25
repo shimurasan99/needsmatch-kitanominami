@@ -2,6 +2,39 @@ import type { AssignmentTable, DealResult, GalleryImage, MajorIndustry, Meeting,
 
 const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
 
+const memberProfileImages: Record<string, string> = {
+  "鈴木 優": "/images/members/m-suzuki-yu.png",
+  "渡辺 穣": "/images/members/m-watanabe-minoru.jpg",
+  "浅里 綾夏": "/images/members/m-asari-ayaka.jpg",
+  "飛山 佳枝": "/images/members/m-hiyama-yoshie.jpg",
+  "伊藤 瞳": "/images/members/m-ito-hitomi.jpg",
+  "中川 裕紀": "/images/members/m-nakagawa-yuki.jpg",
+  "井野 俊彦": "/images/members/m-ino-toshihiko.jpg",
+  "亀嶋 有希": "/images/members/m-kamejima-yuki.png",
+  "佐藤 正人": "/images/members/m-sato-masato.jpg",
+  "野口 貴之": "/images/members/m-noguchi-takayuki.jpg",
+  "向畑 太輔": "/images/members/m-mukohata-taisuke.jpg",
+  "渡辺 匠": "/images/members/m-watanabe-takumi.jpg",
+  "髙橋 惺司": "/images/members/m-takahashi-seiji.jpg",
+  "山形 佳奈": "/images/members/m-yamagata-kana.jpg",
+  "石神 亜矢子": "/images/members/m-ishigami-ayako.png",
+  "岡本 英弥": "/images/members/m-okamoto-hideya.png",
+  "長尾 冴子": "/images/members/m-nagao-saeko.png",
+  "佐藤 美奈子": "/images/members/m-sato-minako.png",
+  "村上 季隆": "/images/members/m-murakami-toshitaka.png",
+  "木林 朋之": "/images/members/m-kibayashi-tomoyuki.png",
+  "吉村 勇紀": "/images/members/m-yoshimura-yuki.png",
+  "三浦 昂大": "/images/members/m-miura-akihiro.png",
+  "三浦 涼華": "/images/members/m-miura-suzuka.png",
+  "吉澤 由季子": "/images/members/m-yoshizawa-yukiko.png",
+  "浜田 翠": "/images/members/m-hamada-midori.png",
+  "水口 遼人": "/images/members/m-mizuguchi-ryoto.png",
+  "中川 麻衣": "/images/members/m-nakagawa-mai.png",
+  "髙谷 理佳": "/images/members/m-takatani-rika.png",
+  "野々村 亮": "/images/members/m-nonomura-ryo.jpg",
+  "橋本 啓太": "/images/members/m-hashimoto-keita.jpg"
+};
+
 const memberRows = [
   ["880", "鈴木 優", "一般社団法人日本営業実践スキル協会", "営業研修", "主催"],
   ["4769", "渡辺 穣", "株式会社ライフプラザパートナーズ", "保険代理店", "幹事"],
@@ -63,7 +96,7 @@ export const members: Member[] = memberRows.map(([memberNo, name, company, indus
     websiteUrl: "https://example.com/",
     industry,
     majorIndustry: inferMajorIndustry(industry, index),
-    profileImageUrl: `/images/member-${(index % 6) + 1}.svg`,
+    profileImageUrl: memberProfileImages[name] ?? `/images/member-${(index % 6) + 1}.svg`,
     bio: `${company}。${industry}を通じて、北のみなみ支部でのつながりと紹介を大切にしています。`,
     position,
     isTableLeader: position !== "一般会員",
