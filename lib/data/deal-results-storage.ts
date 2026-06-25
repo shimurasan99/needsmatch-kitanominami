@@ -2,7 +2,7 @@
 
 import type { DealResult } from "@/types/domain";
 
-export const DEAL_RESULTS_STORAGE_KEY = "nm_deal_results";
+export const DEAL_RESULTS_STORAGE_KEY = "nm_deal_results_v2";
 const DEAL_RESULTS_UPDATED_EVENT = "nm-deal-results-updated";
 
 export function readDealResults(fallback: DealResult[]) {

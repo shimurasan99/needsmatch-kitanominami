@@ -216,33 +216,33 @@ export const messengerThreads = [
 export const dealResults: DealResult[] = [
   {
     id: "deal-1",
-    fromMemberName: "佐藤 正人",
-    toMemberName: "水口 遼人",
-    month: "2026-06",
-    industry: "IT",
-    description: "ホームページ改善と問い合わせ導線の見直しを行い、月例会での相談から正式な制作案件につながりました。",
-    sales: 380000,
-    imageUrl: "/images/kitanominami-page-main.jpg"
+    fromMemberName: "井野 俊彦",
+    toMemberName: "吉村 勇紀",
+    month: "2026-05",
+    industry: "イベント",
+    description: "出会いイベント「いのっちングアプリ」の共同開催。吉村さんが経営するダイニングバーSTRIDEでお客様を集め７：７のマッチングイベントがこれまで３回行われました。",
+    sales: 210000,
+    imageUrl: "/images/deals/deal-inocching-app.jpg"
   },
   {
     id: "deal-2",
-    fromMemberName: "飛山 佳枝",
-    toMemberName: "西森 菜月",
-    month: "2026-05",
-    industry: "美容",
-    description: "美容サロンの紹介から新規顧客獲得につながり、継続利用を含む商談が成立しました。",
-    sales: 120000,
-    imageUrl: "/images/gallery/gallery-02.jpg"
+    fromMemberName: "鈴木 優",
+    toMemberName: "吉村 勇紀",
+    month: "2026-06",
+    industry: "IT",
+    description: "鈴木優さんのお客様からシステム制作の依頼を吉村勇紀さんに紹介され、商談が成立し大型案件の契約となりました",
+    sales: 2000000,
+    imageUrl: "/images/deals/deal-system-production.jpg"
   },
   {
     id: "deal-3",
-    fromMemberName: "村上 季隆",
-    toMemberName: "佐藤 彰洋",
-    month: "2026-04",
-    industry: "研修",
-    description: "社内研修の相談をきっかけに、営業チーム向けの研修実施が決まりました。",
-    sales: 250000,
-    imageUrl: "/images/gallery/gallery-03.jpg"
+    fromMemberName: "井野 俊彦",
+    toMemberName: "吉村 勇紀",
+    month: "2026-02",
+    industry: "イベント",
+    description: "ゲームイベント「いのっちングゲーム」の共同開催。総勢24名の参加者を集めゲームイベントが開催されました。",
+    sales: 120000,
+    imageUrl: "/images/deals/deal-inocching-game.jpg"
   }
 ];
 
