@@ -25,7 +25,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
     isTableLeader: false
   });
 
-  const sortedMembers = useMemo(() => members, [members]);
+  const sortedMembers = useMemo(() => [...members].sort((a, b) => Number(a.memberNo) - Number(b.memberNo)), [members]);
 
   function addMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -186,7 +186,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
                 <td className="p-3">
                   <div className="flex items-center gap-3">
                     <Image src={member.profileImageUrl} alt="" width={40} height={40} className="h-10 w-10 rounded object-cover" />
-                    <div><p className="font-bold">{member.name}</p><p className="text-xs text-slate-500">{member.memberNo}</p></div>
+                    <div><p className="font-bold">{member.name}</p><p className="text-xs text-slate-500">会員No.{member.memberNo}</p></div>
                   </div>
                 </td>
                 <td className="p-3">{member.industry}</td>

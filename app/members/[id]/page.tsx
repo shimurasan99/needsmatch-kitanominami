@@ -13,7 +13,7 @@ export default function MemberDetailPage({ params }: { params: { id: string } })
       <div className="grid gap-8 rounded border border-slate-200 bg-white p-6 shadow-soft md:grid-cols-[240px_1fr]">
         <Image src={member.profileImageUrl} alt={member.name} width={320} height={320} className="aspect-square w-full rounded object-cover" />
         <div>
-          <p className="text-sm font-bold text-forest">{member.memberNo}</p>
+          <p className="text-sm font-bold text-forest">会員No.{member.memberNo}</p>
           <h1 className="mt-2 text-4xl font-black text-deep">{member.name}</h1>
           <p className="mt-2 text-slate-600">{member.kana}</p>
           <div className="mt-5 flex flex-wrap gap-2">

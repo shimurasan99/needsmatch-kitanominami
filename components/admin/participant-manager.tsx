@@ -85,6 +85,7 @@ export function ParticipantManager({
   }, [initialMembers, statuses]);
 
   const attendingMembers = useMemo(() => initialMembers.filter((member) => statuses[member.id] === "参加"), [initialMembers, statuses]);
+  const sortedMembers = useMemo(() => [...initialMembers].sort((a, b) => Number(a.memberNo) - Number(b.memberNo)), [initialMembers]);
   const totalAttendees = attendingMembers.length + guests.length;
 
   function updateStatus(memberId: string, status: MemberAttendanceStatus) {
@@ -240,13 +241,14 @@ export function ParticipantManager({
           <h2 className="font-black text-deep">会員名簿</h2>
           <p className="mt-1 text-sm text-slate-600">会員名簿全員分の出欠を選択できます。</p>
         </div>
-        {initialMembers.map((member) => {
+        {sortedMembers.map((member) => {
           const status = statuses[member.id] ?? "未定";
           return (
             <div key={member.id} className="grid gap-3 border-b border-slate-100 p-4 last:border-b-0 sm:grid-cols-[1fr_150px] sm:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-bold text-deep">{member.name}</p>
+                  <span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">会員No.{member.memberNo}</span>
                   <span className={`rounded px-2 py-1 text-xs font-bold ${statusBadgeClasses[status]}`}>{status}</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-600">{member.company}</p>

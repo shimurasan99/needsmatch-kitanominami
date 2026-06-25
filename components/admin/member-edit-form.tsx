@@ -44,7 +44,7 @@ export function MemberEditForm({ member }: { member: Member }) {
     <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
       <aside className="rounded border border-slate-200 bg-white p-5 shadow-soft">
         <Image src={profileImageUrl || "/images/member-1.svg"} alt={member.name} width={260} height={260} className="aspect-square w-full rounded object-cover" />
-        <p className="mt-4 text-xs font-bold text-forest">{member.memberNo}</p>
+        <p className="mt-4 text-xs font-bold text-forest">会員No.{member.memberNo}</p>
         <h2 className="mt-1 text-2xl font-black text-deep">{member.name}</h2>
         <p className="mt-1 text-sm text-slate-600">{member.email}</p>
       </aside>

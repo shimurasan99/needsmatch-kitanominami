@@ -14,6 +14,7 @@ const memberProfileImages: Record<string, string> = {
   "佐藤 正人": "/images/members/m-sato-masato.jpg",
   "野口 貴之": "/images/members/m-noguchi-takayuki.jpg",
   "向畑 太輔": "/images/members/m-mukohata-taisuke.jpg",
+  "菅咲 伎桂": "/images/members/m-sugasaki-kika.jpg",
   "渡辺 匠": "/images/members/m-watanabe-takumi.jpg",
   "髙橋 惺司": "/images/members/m-takahashi-seiji.jpg",
   "山形 佳奈": "/images/members/m-yamagata-kana.jpg",

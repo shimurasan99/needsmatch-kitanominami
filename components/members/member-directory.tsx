@@ -22,7 +22,7 @@ export function MemberDirectory({ initialMembers, q, major, role }: { initialMem
       if (major && member.majorIndustry !== major) return false;
       if (role && member.position !== role) return false;
       return true;
-    });
+    }).sort((a, b) => Number(a.memberNo) - Number(b.memberNo));
   }, [members, q, major, role]);
 
   return (
@@ -56,7 +56,7 @@ export function MemberDirectory({ initialMembers, q, major, role }: { initialMem
               <div className="flex gap-4">
                 <Image src={member.profileImageUrl} alt={member.name} width={96} height={96} className="h-20 w-20 rounded object-cover" />
                 <div>
-                  <p className="text-xs font-bold text-forest">{member.memberNo}</p>
+                  <p className="text-xs font-bold text-forest">会員No.{member.memberNo}</p>
                   <h2 className="mt-1 text-xl font-black text-deep">{member.name}</h2>
                   <p className="mt-1 text-sm text-slate-600">{member.position}</p>
                 </div>
