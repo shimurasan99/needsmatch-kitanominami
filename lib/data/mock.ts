@@ -39,7 +39,14 @@ const memberProfileImages: Record<string, string> = {
   "坂本 彩": "/images/members/m-sakamoto-aya.jpg",
   "萩原 新": "/images/members/m-hagiwara-arata.jpg",
   "島田 尚幸": "/images/members/m-shimada-naoyuki.jpg",
-  "藤井 善貴": "/images/members/m-fujii-yoshiki.jpg"
+  "藤井 善貴": "/images/members/m-fujii-yoshiki.jpg",
+  "平澤 裕": "/images/members/m-hirasawa-yu.jpg",
+  "前阪 去枝": "/images/members/m-maesaka-sarie.jpg",
+  "佐藤 隼也": "/images/members/m-sato-junya.jpg",
+  "西森 菜月": "/images/members/m-nishimori-natsuki.jpg",
+  "八木 悠磨": "/images/members/m-yagi-yuma.jpg",
+  "中本 怜男": "/images/members/m-nakamoto-reo.jpg",
+  "佐藤 彰洋": "/images/members/m-sato-akihiro.jpg"
 };
 
 const memberRows = [
