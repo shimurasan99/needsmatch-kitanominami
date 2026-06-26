@@ -34,7 +34,12 @@ const memberProfileImages: Record<string, string> = {
   "髙谷 理佳": "/images/members/m-takatani-rika.png",
   "野々村 亮": "/images/members/m-nonomura-ryo.jpg",
   "橋本 啓太": "/images/members/m-hashimoto-keita.jpg",
-  "渡邊 凌": "/images/members/m-watanabe-ryo.jpg"
+  "渡邊 凌": "/images/members/m-watanabe-ryo.jpg",
+  "大西 浩之": "/images/members/m-onishi-hiroyuki.jpg",
+  "坂本 彩": "/images/members/m-sakamoto-aya.jpg",
+  "萩原 新": "/images/members/m-hagiwara-arata.jpg",
+  "島田 尚幸": "/images/members/m-shimada-naoyuki.jpg",
+  "藤井 善貴": "/images/members/m-fujii-yoshiki.jpg"
 };
 
 const memberRows = [
