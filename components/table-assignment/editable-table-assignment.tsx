@@ -190,6 +190,13 @@ export function EditableTableAssignment({
               font-size: 24px;
               line-height: 1.35;
             }
+            .honorific-note {
+              margin-top: 4px;
+              color: #64748b;
+              font-size: 12px;
+              font-weight: 800;
+              line-height: 1.4;
+            }
             .meta {
               color: #64748b;
               font-size: 11px;
@@ -275,7 +282,10 @@ export function EditableTableAssignment({
         </head>
         <body>
           <header>
-            <h1>テーブル割り</h1>
+            <div>
+              <h1>テーブル割り</h1>
+              <div class="honorific-note">敬称略</div>
+            </div>
             <div class="meta">出力日時<br />${escapeHtml(printedAt)}</div>
           </header>
           <main class="grid">${tableCards}</main>

@@ -63,6 +63,7 @@ export function PublishedTableAssignmentSelector({ meetings }: { meetings: Meeti
         <div>
           <p className="text-sm font-bold text-forest">TABLE ASSIGNMENT</p>
           <h2 className="mt-2 text-2xl font-black text-deep">{selectedMeeting ? `${meetingMonthLabel(selectedMeeting)} 定例会のテーブル割り` : "定例会のテーブル割り"}</h2>
+          <p className="mt-1 text-sm font-bold text-slate-500">敬称略</p>
           {selectedAssignment && <p className="mt-1 text-sm text-slate-600">公開日時 {formatLocalUpdatedAt(selectedAssignment.publishedAt)}</p>}
         </div>
 
