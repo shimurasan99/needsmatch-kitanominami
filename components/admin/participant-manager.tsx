@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Download, Eye, Plus, Save, Table2, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { formatLocalUpdatedAt, participantStorageKey, readStoredParticipants, writeStoredParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
+import { fetchStoredParticipants, formatLocalUpdatedAt, participantStorageKey, saveAllParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import type { Member, Participant, ParticipantStatus } from "@/types/domain";
 
@@ -66,13 +66,12 @@ export function ParticipantManager({
   const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
-    const saved = readStoredParticipants(meetingId);
-    if (saved) {
-      if (saved.statuses) setStatuses({ ...createInitialStatuses(initialMembers, initialParticipants), ...saved.statuses } as Record<string, MemberAttendanceStatus>);
-      if (Array.isArray(saved.guests)) setGuests(saved.guests);
-      setLastUpdatedAt(saved.updatedAt);
-    }
-    setIsReady(true);
+    void fetchStoredParticipants(meetingId).then((saved) => {
+      if (saved?.statuses) setStatuses({ ...createInitialStatuses(initialMembers, initialParticipants), ...saved.statuses } as Record<string, MemberAttendanceStatus>);
+      if (Array.isArray(saved?.guests)) setGuests(saved.guests);
+      setLastUpdatedAt(saved?.updatedAt);
+      setIsReady(true);
+    });
   }, [initialMembers, initialParticipants, meetingId, storageKey]);
 
   const counts = useMemo(() => {
@@ -94,12 +93,16 @@ export function ParticipantManager({
     setSavedMessage("");
   }
 
-  function saveParticipants() {
+  async function saveParticipants() {
     if (!isReady) return;
     const updatedAt = new Date().toISOString();
-    writeStoredParticipants(meetingId, { statuses, guests, updatedAt });
-    setLastUpdatedAt(updatedAt);
-    setSavedMessage("参加者情報を保存しました。");
+    try {
+      const saved = await saveAllParticipants(meetingId, { statuses, guests, updatedAt });
+      setLastUpdatedAt(saved.updatedAt);
+      setSavedMessage("参加者情報を保存しました。");
+    } catch (error) {
+      setSavedMessage(error instanceof Error ? error.message : "参加者情報を保存できませんでした。");
+    }
   }
 
   function addGuest(event: FormEvent<HTMLFormElement>) {

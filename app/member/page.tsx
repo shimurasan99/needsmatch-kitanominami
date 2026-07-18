@@ -9,7 +9,7 @@ export default function MemberPage() {
       <h1 className="mt-3 text-4xl font-black text-deep">会員専用ページ</h1>
       <div className="mt-8 grid gap-5 md:grid-cols-3">
         <Card title="定例会出欠" body={`${next.date} ${next.startTime} 開始`}>
-          <ButtonLink href="https://chouseisan.com/s?h=e447d41c93e1462990daf63c4b85e34f" external>出欠ページを開く</ButtonLink>
+          <ButtonLink href="/member/attendance">出欠を回答する</ButtonLink>
         </Card>
         <Card title="メッセンジャースレッド" body="連絡用スレッドと追加スレッドを確認できます。">
           <ButtonLink href="/member/threads" variant="secondary">スレッド一覧</ButtonLink>

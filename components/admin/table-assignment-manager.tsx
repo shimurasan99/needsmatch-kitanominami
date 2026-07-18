@@ -4,7 +4,7 @@ import { Crown, RefreshCw, Send } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { EditableTableAssignment } from "@/components/table-assignment/editable-table-assignment";
 import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
-import { formatLocalUpdatedAt, storedParticipantsToParticipants, subscribeStoredParticipants } from "@/lib/data/participant-storage";
+import { fetchStoredParticipants, formatLocalUpdatedAt, storedParticipantsValueToParticipants, subscribeStoredParticipants, type StoredParticipants } from "@/lib/data/participant-storage";
 import { publishTableAssignment, readPublishedTableAssignment } from "@/lib/data/table-assignment-publication";
 import { generateTableAssignment } from "@/lib/table-assignment/generator";
 import type { AssignmentTable, Member, Participant } from "@/types/domain";
@@ -70,6 +70,7 @@ export function TableAssignmentManager({
 }) {
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [participantVersion, setParticipantVersion] = useState(0);
+  const [storedParticipants, setStoredParticipants] = useState<StoredParticipants | null>(null);
   const [seatsPerTable, setSeatsPerTable] = useState(initialSeatsPerTable);
   const [draftSeatsPerTable, setDraftSeatsPerTable] = useState(initialSeatsPerTable);
   const [currentAssignment, setCurrentAssignment] = useState<StoredTableAssignment | null>(null);
@@ -82,13 +83,20 @@ export function TableAssignmentManager({
   }, [initialMembers, meetingId]);
 
   useEffect(() => {
-    return subscribeStoredParticipants(meetingId, () => setParticipantVersion((current) => current + 1));
+    const refresh = () => {
+      void fetchStoredParticipants(meetingId).then((value) => {
+        setStoredParticipants(value);
+        setParticipantVersion((current) => current + 1);
+      });
+    };
+    refresh();
+    return subscribeStoredParticipants(meetingId, refresh);
   }, [meetingId]);
 
   const generationParticipants = useMemo(() => {
     void participantVersion;
-    return storedParticipantsToParticipants(meetingId, members, initialParticipants);
-  }, [initialParticipants, meetingId, members, participantVersion]);
+    return storedParticipantsValueToParticipants(meetingId, members, initialParticipants, storedParticipants);
+  }, [initialParticipants, meetingId, members, participantVersion, storedParticipants]);
 
   const attendeesCount = useMemo(() => {
     return generationParticipants.filter((participant) => participant.status === "参加" || participant.status === "ゲスト").length;
