@@ -1,14 +1,12 @@
 import { ButtonLink } from "@/components/ui/button-link";
-import { meetings } from "@/lib/data/mock";
 
 export default function MemberPage() {
-  const next = meetings.find((meeting) => meeting.status === "確定") ?? meetings[0];
   return (
     <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
       <p className="text-sm font-bold text-forest">MEMBER</p>
       <h1 className="mt-3 text-4xl font-black text-deep">会員専用ページ</h1>
       <div className="mt-8 grid gap-5 md:grid-cols-3">
-        <Card title="定例会出欠" body={`${next.date} ${next.startTime} 開始`}>
+        <Card title="定例会出欠" body="開催日程を選んで、参加・欠席・未定を回答できます。">
           <ButtonLink href="/member/attendance">出欠を回答する</ButtonLink>
         </Card>
         <Card title="メッセンジャースレッド" body="連絡用スレッドと追加スレッドを確認できます。">

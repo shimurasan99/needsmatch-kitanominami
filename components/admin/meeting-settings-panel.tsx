@@ -2,6 +2,7 @@
 
 import { CalendarCog, Save } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { saveMeetingRecord } from "@/lib/data/meeting-storage";
 import { countMeetingAttendees, subscribeStoredParticipants } from "@/lib/data/participant-storage";
 import type { Meeting, Member, Participant } from "@/types/domain";
 
@@ -20,11 +21,13 @@ function storageKey(meetingId: string) {
 export function MeetingSettingsPanel({
   meeting,
   members,
-  participants
+  participants,
+  onSaved
 }: {
   meeting: Meeting;
   members: Member[];
   participants: Participant[];
+  onSaved: (meeting: Meeting) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -62,10 +65,17 @@ export function MeetingSettingsPanel({
     setSettings((current) => ({ ...current, [field]: value }));
   }
 
-  function save(event: FormEvent<HTMLFormElement>) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    window.localStorage.setItem(storageKey(meeting.id), JSON.stringify(settings));
-    setSaved(true);
+    const next = { ...meeting, ...settings };
+    try {
+      const savedMeeting = await saveMeetingRecord(next);
+      window.localStorage.setItem(storageKey(meeting.id), JSON.stringify(settings));
+      onSaved(savedMeeting);
+      setSaved(true);
+    } catch {
+      setSaved(false);
+    }
   }
 
   return (

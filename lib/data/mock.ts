@@ -177,6 +177,66 @@ export const meetings: Meeting[] = [
     note: "毎月第3金曜日開催。受付は15:45からです。",
     applicationDeadline: "2026-07-14",
     status: "確定"
+  },
+  {
+    id: "meeting-2026-08",
+    title: "2026年8月 北のみなみ月例会",
+    date: "2026-08-21",
+    startTime: "16:00",
+    endTime: "18:00",
+    venueName: "会場調整中",
+    venueAddress: "",
+    note: "",
+    applicationDeadline: "2026-08-18",
+    status: "確定"
+  },
+  {
+    id: "meeting-2026-09",
+    title: "2026年9月 北のみなみ月例会",
+    date: "2026-09-18",
+    startTime: "16:00",
+    endTime: "18:00",
+    venueName: "会場調整中",
+    venueAddress: "",
+    note: "",
+    applicationDeadline: "2026-09-15",
+    status: "確定"
+  },
+  {
+    id: "meeting-2026-10",
+    title: "2026年10月 北のみなみ月例会",
+    date: "2026-10-16",
+    startTime: "16:00",
+    endTime: "18:00",
+    venueName: "会場調整中",
+    venueAddress: "",
+    note: "",
+    applicationDeadline: "2026-10-13",
+    status: "確定"
+  },
+  {
+    id: "meeting-2026-11",
+    title: "2026年11月 北のみなみ月例会",
+    date: "2026-11-20",
+    startTime: "16:00",
+    endTime: "18:00",
+    venueName: "会場調整中",
+    venueAddress: "",
+    note: "",
+    applicationDeadline: "2026-11-17",
+    status: "確定"
+  },
+  {
+    id: "meeting-2026-12",
+    title: "2026年12月 北のみなみ月例会",
+    date: "2026-12-18",
+    startTime: "16:00",
+    endTime: "18:00",
+    venueName: "会場調整中",
+    venueAddress: "",
+    note: "",
+    applicationDeadline: "2026-12-15",
+    status: "確定"
   }
 ];
 
