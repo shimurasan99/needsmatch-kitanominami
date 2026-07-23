@@ -21,7 +21,7 @@ export default function MemberLoginPage({ searchParams }: { searchParams: { redi
           <input type="hidden" name="redirect" value={redirectTo} />
           <label className="block">
             <span className="text-sm font-bold">{isAdminLogin ? "運営専用パスワード" : "会員専用パスワード"}</span>
-            <input name="password" type="password" placeholder={isAdminLogin ? "kita1118" : "kita2026"} className="focus-ring mt-2 w-full rounded border border-slate-200 px-3 py-3" />
+            <input name="password" type="password" autoComplete="current-password" placeholder="パスワードを入力" className="focus-ring mt-2 w-full rounded border border-slate-200 px-3 py-3" />
           </label>
           <button className="focus-ring rounded bg-forest px-4 py-3 text-sm font-bold text-white hover:bg-green-800">
             ログイン
