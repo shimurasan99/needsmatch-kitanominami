@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Save } from "lucide-react";
+import { Save, Upload } from "lucide-react";
 import { readMemberOverrides, writeMemberOverride } from "@/lib/data/member-overrides";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
@@ -20,6 +20,8 @@ export function MemberEditForm({ member }: { member: Member }) {
   const [instagramUrl, setInstagramUrl] = useState(merged.instagramUrl);
   const [websiteUrl, setWebsiteUrl] = useState(merged.websiteUrl);
   const [saved, setSaved] = useState(false);
+  const [imageError, setImageError] = useState("");
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
 
   useEffect(() => {
     const overrides = readMemberOverrides();
@@ -32,18 +34,65 @@ export function MemberEditForm({ member }: { member: Member }) {
     setFacebookUrl(next.facebookUrl);
     setInstagramUrl(next.instagramUrl);
     setWebsiteUrl(next.websiteUrl);
+    setImageError("");
   }, [member]);
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    writeMemberOverride(member.id, { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl });
-    setSaved(true);
+    try {
+      writeMemberOverride(member.id, { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl });
+      setSaved(true);
+      setImageError("");
+    } catch {
+      setSaved(false);
+      setImageError("保存できませんでした。別の写真を選ぶか、より小さい画像をお試しください。");
+    }
+  }
+
+  async function uploadProfileImage(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setImageError("画像ファイルを選択してください。");
+      return;
+    }
+
+    setIsProcessingImage(true);
+    setImageError("");
+    setSaved(false);
+
+    try {
+      const dataUrl = await resizeImageAsDataUrl(file);
+      setProfileImageUrl(dataUrl);
+    } catch {
+      setImageError("画像を読み込めませんでした。JPEG、PNG、WebP形式の写真をお試しください。");
+    } finally {
+      setIsProcessingImage(false);
+    }
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
       <aside className="rounded border border-slate-200 bg-white p-5 shadow-soft">
-        <Image src={profileImageUrl || "/images/member-1.svg"} alt={member.name} width={260} height={260} className="aspect-square w-full rounded object-cover" />
+        <Image
+          src={profileImageUrl || "/images/member-1.svg"}
+          alt={member.name}
+          width={260}
+          height={260}
+          className="aspect-square w-full rounded object-cover"
+          unoptimized={profileImageUrl.startsWith("data:")}
+        />
+        <label className="focus-ring mt-3 flex cursor-pointer items-center justify-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-deep hover:bg-snow">
+          <Upload size={16} />
+          {isProcessingImage ? "画像を処理中..." : "写真をアップロード"}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={isProcessingImage}
+            onChange={(event) => uploadProfileImage(event.target.files?.[0])}
+            className="sr-only"
+          />
+        </label>
+        <p className="mt-2 text-xs leading-5 text-slate-500">JPEG・PNG・WebPに対応。選択後に「保存する」を押してください。</p>
         <p className="mt-4 text-xs font-bold text-forest">会員No.{member.memberNo}</p>
         <h2 className="mt-1 text-2xl font-black text-deep">{member.name}</h2>
         <p className="mt-1 text-sm text-slate-600">{member.email}</p>
@@ -51,10 +100,19 @@ export function MemberEditForm({ member }: { member: Member }) {
 
       <form onSubmit={save} className="rounded border border-slate-200 bg-white p-5 shadow-soft">
         {saved && <p className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm font-bold text-forest">保存しました。会員紹介ページへ反映されます。</p>}
+        {imageError && <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{imageError}</p>}
         <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2">
             <span className="text-sm font-bold text-slate-600">写真URL</span>
-            <input value={profileImageUrl} onChange={(e) => setProfileImageUrl(e.target.value)} className="focus-ring rounded border border-slate-200 px-3 py-3" />
+            <input
+              value={profileImageUrl.startsWith("data:") ? "アップロードした画像" : profileImageUrl}
+              onChange={(e) => {
+                setProfileImageUrl(e.target.value);
+                setSaved(false);
+              }}
+              readOnly={profileImageUrl.startsWith("data:")}
+              className="focus-ring rounded border border-slate-200 px-3 py-3 read-only:bg-slate-50 read-only:text-slate-500"
+            />
           </label>
           <label className="grid gap-2">
             <span className="text-sm font-bold text-slate-600">役職</span>
@@ -99,4 +157,41 @@ export function MemberEditForm({ member }: { member: Member }) {
       </form>
     </div>
   );
+}
+
+function resizeImageAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const source = new window.Image();
+
+      source.onload = () => {
+        const maxSize = 800;
+        const scale = Math.min(1, maxSize / Math.max(source.naturalWidth, source.naturalHeight));
+        const width = Math.max(1, Math.round(source.naturalWidth * scale));
+        const height = Math.max(1, Math.round(source.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        if (!context) {
+          reject(new Error("Canvas is not available"));
+          return;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, width, height);
+        context.drawImage(source, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+
+      source.onerror = () => reject(new Error("Image could not be loaded"));
+      source.src = String(reader.result);
+    };
+
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
