@@ -8,7 +8,8 @@ export type MemberEditableFields = Pick<Member, "profileImageUrl" | "position" |
 export type MemberOverrides = Record<string, Partial<MemberEditableFields>>;
 
 export function applyMemberOverrides(members: Member[], overrides: MemberOverrides): Member[] {
-  return [...members.map((member) => ({ ...member, ...(overrides[member.id] ?? {}) })), ...readMemberAdditions()];
+  const allMembers = [...members, ...readMemberAdditions()];
+  return allMembers.map((member) => ({ ...member, ...(overrides[member.id] ?? {}) }));
 }
 
 export function readMemberOverrides(): MemberOverrides {
