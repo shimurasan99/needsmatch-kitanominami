@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Download, Plus, Upload } from "lucide-react";
+import { Download, Plus, Trash2, Upload } from "lucide-react";
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { readMemberAdditions, readMemberOverrides, writeMemberAdditions, applyMemberOverrides } from "@/lib/data/member-overrides";
+import { applyMemberOverrides, deleteMemberRecord, readMemberAdditions, readMemberOverrides, writeMemberAdditions } from "@/lib/data/member-overrides";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
@@ -16,6 +16,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
   const [members, setMembers] = useState<Member[]>(() => applyMemberOverrides(initialMembers, readMemberOverrides()));
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
   const [newMember, setNewMember] = useState({
     memberNo: "",
     name: "",
@@ -27,6 +28,14 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
   });
 
   const sortedMembers = useMemo(() => sortMembersForDirectory(members), [members]);
+
+  function confirmDeleteMember() {
+    if (!memberToDelete) return;
+    deleteMemberRecord(memberToDelete.id);
+    setMembers((current) => current.filter((member) => member.id !== memberToDelete.id));
+    setMessage(`${memberToDelete.name}さんを削除しました。`);
+    setMemberToDelete(null);
+  }
 
   function addMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,15 +205,47 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
                 <td className="p-3">{member.status}</td>
                 <td className="p-3">{member.isVisible ? "表示" : "非表示"}</td>
                 <td className="p-3">
-                  <Link href={`/admin/members/${member.id}`} className="focus-ring rounded border border-slate-200 px-3 py-1 font-bold">
-                    編集
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/admin/members/${member.id}`} className="focus-ring rounded border border-slate-200 px-3 py-1 font-bold">
+                      編集
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setMemberToDelete(member)}
+                      className="focus-ring inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1 font-bold text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                      削除
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {memberToDelete && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-member-title">
+          <div className="w-full max-w-md rounded border border-red-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center gap-3 text-red-700">
+              <Trash2 size={24} />
+              <h2 id="delete-member-title" className="text-xl font-black">本当に削除しますか？</h2>
+            </div>
+            <p className="mt-4 leading-7 text-slate-700">
+              <span className="font-black text-deep">{memberToDelete.name}</span>さんの会員情報を削除します。この操作は元に戻せません。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setMemberToDelete(null)} className="focus-ring rounded border border-slate-200 px-4 py-2 font-bold text-deep hover:bg-snow">
+                キャンセル
+              </button>
+              <button type="button" onClick={confirmDeleteMember} className="focus-ring inline-flex items-center gap-2 rounded bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700">
+                <Trash2 size={16} />
+                削除を確定する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
