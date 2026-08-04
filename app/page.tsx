@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CalendarDays, CheckCircle2, Handshake, MapPin, MountainSnow, Sparkles, UsersRound } from "lucide-react";
+import { CheckCircle2, Handshake, MountainSnow, Sparkles, UsersRound } from "lucide-react";
 import { GallerySlider } from "@/components/gallery/gallery-slider";
+import { NextMeetingCard } from "@/components/home/next-meeting-card";
 import { ButtonLink } from "@/components/ui/button-link";
 import { galleryImages, meetings, members } from "@/lib/data/mock";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
@@ -12,10 +13,6 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const managedMeetings = await loadManagedMeetings();
-  const today = getTodayInJapan();
-  const confirmedMeetings = managedMeetings.filter((meeting) => meeting.status === "確定").sort((a, b) => a.date.localeCompare(b.date));
-  const nextMeeting = confirmedMeetings.find((meeting) => meeting.date >= today) ?? confirmedMeetings.at(-1) ?? managedMeetings[0];
-  const meetingVenue = [nextMeeting.venueName, nextMeeting.venueAddress].filter(Boolean).join(" / ");
   const visibleMembers = sortMembersForDirectory(members.filter((member) => member.isVisible && member.status === "在籍")).slice(0, 4);
 
   return (
@@ -52,22 +49,7 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="glass-panel rounded border border-white/50 p-5 text-deep">
-            <div className="overflow-hidden rounded bg-white">
-              <Image src="/images/kitanominami-logo.jpg" alt="北のみなみ支部ロゴ" width={900} height={620} className="aspect-[4/3] w-full object-cover" />
-            </div>
-            <div className="mt-5 grid gap-4">
-              <div>
-                <p className="section-kicker">NEXT MEETING</p>
-                <h2 className="mt-2 text-2xl font-black">次回定例会</h2>
-              </div>
-              <div className="grid gap-3 text-sm">
-                <Info icon={<CalendarDays size={20} />} label="日程" value={`${nextMeeting.date} ${nextMeeting.startTime}-${nextMeeting.endTime}`} />
-                <Info icon={<MapPin size={20} />} label="会場" value={meetingVenue} />
-              </div>
-              <ButtonLink href="/entry">参加申込へ進む</ButtonLink>
-            </div>
-          </div>
+          <NextMeetingCard initialMeetings={managedMeetings} />
         </div>
       </section>
 
@@ -170,29 +152,6 @@ async function loadManagedMeetings(): Promise<Meeting[]> {
   });
 
   return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function getTodayInJapan() {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function Info({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex gap-3">
-      <span className="mt-1 text-forest">{icon}</span>
-      <p>
-        <span className="block text-xs font-bold text-slate-500">{label}</span>
-        <span className="font-semibold text-deep">{value}</span>
-      </p>
-    </div>
-  );
 }
 
 function HeroMetric({ value, label }: { value: string; label: string }) {
