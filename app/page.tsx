@@ -5,13 +5,17 @@ import { GallerySlider } from "@/components/gallery/gallery-slider";
 import { ButtonLink } from "@/components/ui/button-link";
 import { galleryImages, meetings, members } from "@/lib/data/mock";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Meeting } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const managedMeetings = await loadManagedMeetings();
   const today = getTodayInJapan();
-  const confirmedMeetings = meetings.filter((meeting) => meeting.status === "確定").sort((a, b) => a.date.localeCompare(b.date));
-  const nextMeeting = confirmedMeetings.find((meeting) => meeting.date >= today) ?? confirmedMeetings.at(-1) ?? meetings[0];
+  const confirmedMeetings = managedMeetings.filter((meeting) => meeting.status === "確定").sort((a, b) => a.date.localeCompare(b.date));
+  const nextMeeting = confirmedMeetings.find((meeting) => meeting.date >= today) ?? confirmedMeetings.at(-1) ?? managedMeetings[0];
+  const meetingVenue = [nextMeeting.venueName, nextMeeting.venueAddress].filter(Boolean).join(" / ");
   const visibleMembers = sortMembersForDirectory(members.filter((member) => member.isVisible && member.status === "在籍")).slice(0, 4);
 
   return (
@@ -59,7 +63,7 @@ export default function HomePage() {
               </div>
               <div className="grid gap-3 text-sm">
                 <Info icon={<CalendarDays size={20} />} label="日程" value={`${nextMeeting.date} ${nextMeeting.startTime}-${nextMeeting.endTime}`} />
-                <Info icon={<MapPin size={20} />} label="会場" value={`${nextMeeting.venueName} / ${nextMeeting.venueAddress}`} />
+                <Info icon={<MapPin size={20} />} label="会場" value={meetingVenue} />
               </div>
               <ButtonLink href="/entry">参加申込へ進む</ButtonLink>
             </div>
@@ -139,6 +143,33 @@ export default function HomePage() {
       </section>
     </>
   );
+}
+
+async function loadManagedMeetings(): Promise<Meeting[]> {
+  const supabase = createSupabaseServerClient();
+  if (!supabase) return meetings;
+
+  const { data, error } = await supabase.from("managed_meetings").select("*").order("meeting_date");
+  if (error || !data) return meetings;
+
+  const byId = new Map(meetings.map((meeting) => [meeting.id, meeting]));
+  data.forEach((row) => {
+    const meeting: Meeting = {
+      id: row.meeting_key,
+      title: row.title,
+      date: row.meeting_date,
+      startTime: row.start_time.slice(0, 5),
+      endTime: row.end_time.slice(0, 5),
+      venueName: row.venue_name,
+      venueAddress: row.venue_address,
+      note: row.note,
+      applicationDeadline: row.application_deadline,
+      status: row.status as Meeting["status"]
+    };
+    byId.set(meeting.id, meeting);
+  });
+
+  return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function getTodayInJapan() {
