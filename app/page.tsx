@@ -6,8 +6,12 @@ import { ButtonLink } from "@/components/ui/button-link";
 import { galleryImages, meetings, members } from "@/lib/data/mock";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
 
+export const dynamic = "force-dynamic";
+
 export default function HomePage() {
-  const nextMeeting = meetings.find((meeting) => meeting.status === "確定") ?? meetings[0];
+  const today = getTodayInJapan();
+  const confirmedMeetings = meetings.filter((meeting) => meeting.status === "確定").sort((a, b) => a.date.localeCompare(b.date));
+  const nextMeeting = confirmedMeetings.find((meeting) => meeting.date >= today) ?? confirmedMeetings.at(-1) ?? meetings[0];
   const visibleMembers = sortMembersForDirectory(members.filter((member) => member.isVisible && member.status === "在籍")).slice(0, 4);
 
   return (
@@ -135,6 +139,17 @@ export default function HomePage() {
       </section>
     </>
   );
+}
+
+function getTodayInJapan() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function Info({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
