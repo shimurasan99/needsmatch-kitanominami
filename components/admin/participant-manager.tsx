@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Download, Eye, Plus, Save, Table2, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
 import { fetchStoredParticipants, formatLocalUpdatedAt, participantStorageKey, saveAllParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import type { Member, Participant, ParticipantStatus } from "@/types/domain";
@@ -52,6 +53,7 @@ export function ParticipantManager({
   initialParticipants: Participant[];
 }) {
   const storageKey = participantStorageKey(meetingId);
+  const [members, setMembers] = useState<Member[]>(initialMembers);
   const [statuses, setStatuses] = useState<Record<string, MemberAttendanceStatus>>(() => createInitialStatuses(initialMembers, initialParticipants));
   const [guests, setGuests] = useState<GuestEntry[]>([]);
   const [isGuestFormOpen, setIsGuestFormOpen] = useState(false);
@@ -66,26 +68,30 @@ export function ParticipantManager({
   const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
+    setMembers(applyMemberOverrides(initialMembers, readMemberOverrides()));
+  }, [initialMembers]);
+
+  useEffect(() => {
     void fetchStoredParticipants(meetingId).then((saved) => {
-      if (saved?.statuses) setStatuses({ ...createInitialStatuses(initialMembers, initialParticipants), ...saved.statuses } as Record<string, MemberAttendanceStatus>);
+      setStatuses({ ...createInitialStatuses(members, initialParticipants), ...(saved?.statuses ?? {}) } as Record<string, MemberAttendanceStatus>);
       if (Array.isArray(saved?.guests)) setGuests(saved.guests);
       setLastUpdatedAt(saved?.updatedAt);
       setIsReady(true);
     });
-  }, [initialMembers, initialParticipants, meetingId, storageKey]);
+  }, [initialParticipants, meetingId, members, storageKey]);
 
   const counts = useMemo(() => {
-    return initialMembers.reduce(
+    return members.reduce(
       (acc, member) => {
         acc[statuses[member.id] ?? "未定"] += 1;
         return acc;
       },
       { 参加: 0, 欠席: 0, 未定: 0 } as Record<MemberAttendanceStatus, number>
     );
-  }, [initialMembers, statuses]);
+  }, [members, statuses]);
 
-  const attendingMembers = useMemo(() => initialMembers.filter((member) => statuses[member.id] === "参加"), [initialMembers, statuses]);
-  const sortedMembers = useMemo(() => sortMembersForDirectory(initialMembers), [initialMembers]);
+  const attendingMembers = useMemo(() => members.filter((member) => statuses[member.id] === "参加"), [members, statuses]);
+  const sortedMembers = useMemo(() => sortMembersForDirectory(members), [members]);
   const totalAttendees = attendingMembers.length + guests.length;
 
   function updateStatus(memberId: string, status: MemberAttendanceStatus) {
@@ -130,7 +136,7 @@ export function ParticipantManager({
   }
 
   function exportCsv() {
-    const memberRows = initialMembers.map((member) => [
+    const memberRows = members.map((member) => [
       member.memberNo,
       member.name,
       member.company ?? "",
