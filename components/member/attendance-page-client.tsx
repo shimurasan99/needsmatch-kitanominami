@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { AttendanceForm } from "@/components/member/attendance-form";
 import { fetchMeetings } from "@/lib/data/meeting-storage";
+import { fetchManagedMembers } from "@/lib/data/member-overrides";
 import type { Meeting, Member } from "@/types/domain";
 
 export function AttendancePageClient({ initialMeetings, members }: { initialMeetings: Meeting[]; members: Member[] }) {
   const [meetings, setMeetings] = useState(initialMeetings);
+  const [managedMembers, setManagedMembers] = useState(members);
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
   const upcoming = useMemo(() => meetings.filter((meeting) => meeting.status === "確定" && meeting.date >= today).sort((a, b) => a.date.localeCompare(b.date)), [meetings, today]);
   const [meetingId, setMeetingId] = useState(upcoming[0]?.id ?? "");
@@ -18,6 +20,10 @@ export function AttendancePageClient({ initialMeetings, members }: { initialMeet
       setMeetingId((current) => value.some((meeting) => meeting.id === current && meeting.status === "確定" && meeting.date >= today) ? current : first?.id ?? "");
     });
   }, [initialMeetings, today]);
+
+  useEffect(() => {
+    void fetchManagedMembers(members).then(setManagedMembers).catch(() => setManagedMembers(members));
+  }, [members]);
 
   const meeting = upcoming.find((item) => item.id === meetingId) ?? upcoming[0];
   if (!meeting) return <p className="mt-8 rounded bg-snow p-5 font-bold text-slate-600">現在、回答受付中の月例会はありません。</p>;
@@ -36,7 +42,7 @@ export function AttendancePageClient({ initialMeetings, members }: { initialMeet
         <p className="mt-1 text-sm text-slate-600">{meeting.venueName}</p>
         <p className="mt-3 text-sm font-bold text-accent">回答期限: {meeting.applicationDeadline}</p>
       </div>
-      <AttendanceForm key={meeting.id} meeting={meeting} members={members} />
+      <AttendanceForm key={meeting.id} meeting={meeting} members={managedMembers} />
     </>
   );
 }

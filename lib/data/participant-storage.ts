@@ -63,8 +63,8 @@ export async function saveMemberAttendance(meetingId: string, memberId: string, 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ memberId, status })
   });
-  if (!response.ok && response.status !== 503) throw new Error("出欠を保存できませんでした。");
-  const result = response.ok ? await response.json() as { updatedAt?: string } : {};
+  if (!response.ok) throw new Error("出欠をサーバーへ保存できませんでした。時間をおいて再度お試しください。");
+  const result = await response.json() as { updatedAt?: string };
   writeStoredParticipants(meetingId, { ...fallback, updatedAt: result.updatedAt ?? fallback.updatedAt });
   return result.updatedAt ?? fallback.updatedAt;
 }
@@ -75,8 +75,8 @@ export async function saveAllParticipants(meetingId: string, value: StoredPartic
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(value)
   });
-  if (!response.ok && response.status !== 503) throw new Error("参加者情報を保存できませんでした。");
-  const result = response.ok ? await response.json() as { updatedAt?: string } : {};
+  if (!response.ok) throw new Error("参加者情報をサーバーへ保存できませんでした。時間をおいて再度お試しください。");
+  const result = await response.json() as { updatedAt?: string };
   const saved = { ...value, updatedAt: result.updatedAt ?? value.updatedAt ?? new Date().toISOString() };
   writeStoredParticipants(meetingId, saved);
   return saved;

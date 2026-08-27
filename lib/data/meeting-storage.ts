@@ -44,9 +44,9 @@ export async function saveMeetingRecord(meeting: Meeting, isNew = false) {
       body: JSON.stringify(saved)
     });
     if (response.ok) saved = await response.json() as Meeting;
-    else if (response.status !== 503) throw new Error("月例会を保存できませんでした。");
+    else throw new Error("月例会をサーバーへ保存できませんでした。環境設定と通信状態を確認してください。");
   } catch (error) {
-    if (error instanceof Error && error.message === "月例会を保存できませんでした。") throw error;
+    throw error instanceof Error ? error : new Error("月例会をサーバーへ保存できませんでした。");
   }
 
   const merged = mergeMeetings(readLocalMeetings(), [saved]);

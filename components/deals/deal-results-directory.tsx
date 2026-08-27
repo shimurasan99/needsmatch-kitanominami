@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ArrowRight, Banknote, CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { readDealResults, subscribeDealResults } from "@/lib/data/deal-results-storage";
+import { fetchDealResults, readDealResults, subscribeDealResults } from "@/lib/data/deal-results-storage";
 import type { DealIndustry, DealResult } from "@/types/domain";
 
 const dealIndustries: DealIndustry[] = ["美容", "商材", "イベント", "IT", "販売", "飲食", "保険", "不動産", "営業", "研修"];
@@ -25,7 +25,7 @@ export function DealResultsDirectory({ initialDeals }: { initialDeals: DealResul
   const [sortKey, setSortKey] = useState<SortKey>("newest");
 
   useEffect(() => {
-    setDeals(readDealResults(initialDeals));
+    void fetchDealResults(initialDeals).then(setDeals).catch(() => setDeals(readDealResults(initialDeals)));
     return subscribeDealResults(() => setDeals(readDealResults(initialDeals)));
   }, [initialDeals]);
 

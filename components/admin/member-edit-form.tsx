@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Save, Upload } from "lucide-react";
-import { readMemberOverrides, writeMemberOverride } from "@/lib/data/member-overrides";
+import { fetchManagedMembers, readMemberOverrides, saveMemberOverride } from "@/lib/data/member-overrides";
+import { members as initialMembers } from "@/lib/data/mock";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
 const roles: RoleName[] = ["主催", "事務局長", "幹事", "役員", "支部サポーター", "準役員", "一般会員"];
@@ -22,30 +23,35 @@ export function MemberEditForm({ member }: { member: Member }) {
   const [saved, setSaved] = useState(false);
   const [imageError, setImageError] = useState("");
   const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const overrides = readMemberOverrides();
-    const next = { ...member, ...(overrides[member.id] ?? {}) };
-    setProfileImageUrl(next.profileImageUrl);
-    setPosition(next.position);
-    setIsTableLeader(next.isTableLeader);
-    setIndustry(next.industry);
-    setMajorIndustry(next.majorIndustry);
-    setFacebookUrl(next.facebookUrl);
-    setInstagramUrl(next.instagramUrl);
-    setWebsiteUrl(next.websiteUrl);
-    setImageError("");
+    void fetchManagedMembers(initialMembers).then((allMembers) => {
+      const next = allMembers.find((item) => item.id === member.id) ?? member;
+      setProfileImageUrl(next.profileImageUrl);
+      setPosition(next.position);
+      setIsTableLeader(next.isTableLeader);
+      setIndustry(next.industry);
+      setMajorIndustry(next.majorIndustry);
+      setFacebookUrl(next.facebookUrl);
+      setInstagramUrl(next.instagramUrl);
+      setWebsiteUrl(next.websiteUrl);
+      setImageError("");
+    }).catch(() => setImageError("共有データを読み込めませんでした。"));
   }, [member]);
 
-  function save(event: FormEvent<HTMLFormElement>) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setIsSaving(true);
     try {
-      writeMemberOverride(member.id, { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl });
+      await saveMemberOverride(member.id, { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl });
       setSaved(true);
       setImageError("");
-    } catch {
+    } catch (error) {
       setSaved(false);
-      setImageError("保存できませんでした。別の写真を選ぶか、より小さい画像をお試しください。");
+      setImageError(error instanceof Error ? error.message : "保存できませんでした。別の写真を選ぶか、より小さい画像をお試しください。");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -148,9 +154,9 @@ export function MemberEditForm({ member }: { member: Member }) {
           </label>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button type="submit" className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-5 py-3 text-sm font-bold text-white">
+          <button type="submit" disabled={isSaving} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
             <Save size={18} />
-            保存する
+            {isSaving ? "保存中..." : "保存する"}
           </button>
           <a href="/admin/members" className="focus-ring rounded border border-slate-200 px-5 py-3 text-sm font-bold">一覧へ戻る</a>
         </div>

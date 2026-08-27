@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
-import { readDealResults, writeDealResults } from "@/lib/data/deal-results-storage";
+import { fetchDealResults, saveDealResults } from "@/lib/data/deal-results-storage";
 import type { DealIndustry, DealResult, Member } from "@/types/domain";
 
 const dealIndustries: DealIndustry[] = ["美容", "商材", "イベント", "IT", "販売", "飲食", "保険", "不動産", "営業", "研修"];
@@ -11,9 +11,10 @@ const dealIndustries: DealIndustry[] = ["美容", "商材", "イベント", "IT"
 export function DealResultsManager({ initialDeals, members }: { initialDeals: DealResult[]; members: Member[] }) {
   const [deals, setDeals] = useState<DealResult[]>(initialDeals);
   const [saved, setSaved] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setDeals(readDealResults(initialDeals));
+    void fetchDealResults(initialDeals).then(setDeals).catch(() => setMessage("共有データを読み込めませんでした。"));
   }, [initialDeals]);
 
   function addDeal() {
@@ -43,15 +44,20 @@ export function DealResultsManager({ initialDeals, members }: { initialDeals: De
     setDeals((current) => current.filter((deal) => deal.id !== id));
   }
 
-  function saveDeals() {
-    writeDealResults(deals);
-    setSaved(true);
+  async function saveDeals() {
+    try {
+      await saveDealResults(deals);
+      setSaved(true);
+      setMessage("");
+    } catch (error) {
+      setSaved(false);
+      setMessage(error instanceof Error ? error.message : "保存できませんでした。");
+    }
   }
 
-  function resetDeals() {
+  async function resetDeals() {
     setDeals(initialDeals);
-    writeDealResults(initialDeals);
-    setSaved(true);
+    try { await saveDealResults(initialDeals); setSaved(true); } catch { setMessage("初期状態を保存できませんでした。"); }
   }
 
   async function uploadImage(id: string, file: File | undefined) {
@@ -80,6 +86,7 @@ export function DealResultsManager({ initialDeals, members }: { initialDeals: De
           </div>
         </div>
         {saved && <p className="mt-4 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-forest">保存しました。商談成立実績ページへ反映されます。</p>}
+        {message && <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{message}</p>}
       </div>
 
       <div className="grid gap-4">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Download, Eye, Plus, Save, Table2, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
+import { fetchManagedMembers } from "@/lib/data/member-overrides";
 import { fetchStoredParticipants, formatLocalUpdatedAt, participantStorageKey, saveAllParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import type { Member, Participant, ParticipantStatus } from "@/types/domain";
@@ -68,7 +68,7 @@ export function ParticipantManager({
   const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
-    setMembers(applyMemberOverrides(initialMembers, readMemberOverrides()));
+    void fetchManagedMembers(initialMembers).then(setMembers).catch(() => setMembers(initialMembers));
   }, [initialMembers]);
 
   useEffect(() => {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { MemberEditForm } from "@/components/admin/member-edit-form";
 import { members } from "@/lib/data/mock";
-import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
+import { fetchManagedMembers } from "@/lib/data/member-overrides";
 import type { Member } from "@/types/domain";
 
 export default function AdminMemberEditPage({ params }: { params: { id: string } }) {
@@ -13,9 +13,10 @@ export default function AdminMemberEditPage({ params }: { params: { id: string }
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const savedMembers = applyMemberOverrides(members, readMemberOverrides());
-    setMember(savedMembers.find((item) => item.id === params.id));
-    setIsLoaded(true);
+    void fetchManagedMembers(members).then((savedMembers) => {
+      setMember(savedMembers.find((item) => item.id === params.id));
+      setIsLoaded(true);
+    }).catch(() => setIsLoaded(true));
   }, [params.id]);
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import type { GalleryImage } from "@/types/domain";
+import { fetchSharedState, saveSharedState } from "@/lib/data/shared-state";
 
 export const GALLERY_STORAGE_KEY = "nm_gallery_images_v2";
 const GALLERY_UPDATED_EVENT = "nm-gallery-updated";
@@ -23,6 +24,19 @@ export function writeGalleryImages(images: GalleryImage[]) {
   const next = images.slice(0, 10);
   window.localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event(GALLERY_UPDATED_EVENT));
+}
+
+export async function fetchGalleryImages(fallback: GalleryImage[]) {
+  const shared = await fetchSharedState<GalleryImage[]>("gallery");
+  const next = (shared ?? readGalleryImages(fallback)).slice(0, 10);
+  window.localStorage.setItem(GALLERY_STORAGE_KEY, JSON.stringify(next));
+  return next;
+}
+
+export async function saveGalleryImages(images: GalleryImage[]) {
+  const next = images.slice(0, 10);
+  await saveSharedState("gallery", next);
+  writeGalleryImages(next);
 }
 
 export function subscribeGalleryImages(listener: () => void) {

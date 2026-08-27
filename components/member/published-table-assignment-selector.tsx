@@ -3,7 +3,7 @@
 import { CalendarDays, Crown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatLocalUpdatedAt } from "@/lib/data/participant-storage";
-import { readPublishedTableAssignments, subscribePublishedTableAssignments, type PublishedTableAssignment } from "@/lib/data/table-assignment-publication";
+import { fetchPublishedTableAssignments, readPublishedTableAssignments, subscribePublishedTableAssignments, type PublishedTableAssignment } from "@/lib/data/table-assignment-publication";
 import type { AssignmentTable, Meeting } from "@/types/domain";
 
 function meetingMonthLabel(meeting: Meeting) {
@@ -16,7 +16,7 @@ export function PublishedTableAssignmentSelector({ meetings }: { meetings: Meeti
   const [publishedAssignments, setPublishedAssignments] = useState<Record<string, PublishedTableAssignment>>({});
 
   useEffect(() => {
-    setPublishedAssignments(readPublishedTableAssignments());
+    void fetchPublishedTableAssignments().then(setPublishedAssignments).catch(() => setPublishedAssignments(readPublishedTableAssignments()));
     return subscribePublishedTableAssignments(() => setPublishedAssignments(readPublishedTableAssignments()));
   }, []);
 

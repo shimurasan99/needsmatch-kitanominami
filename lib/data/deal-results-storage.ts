@@ -1,6 +1,7 @@
 "use client";
 
 import type { DealResult } from "@/types/domain";
+import { fetchSharedState, saveSharedState } from "@/lib/data/shared-state";
 
 export const DEAL_RESULTS_STORAGE_KEY = "nm_deal_results_v2";
 const DEAL_RESULTS_UPDATED_EVENT = "nm-deal-results-updated";
@@ -22,6 +23,18 @@ export function readDealResults(fallback: DealResult[]) {
 export function writeDealResults(deals: DealResult[]) {
   window.localStorage.setItem(DEAL_RESULTS_STORAGE_KEY, JSON.stringify(deals));
   window.dispatchEvent(new Event(DEAL_RESULTS_UPDATED_EVENT));
+}
+
+export async function fetchDealResults(fallback: DealResult[]) {
+  const shared = await fetchSharedState<DealResult[]>("deals");
+  const next = shared ?? readDealResults(fallback);
+  window.localStorage.setItem(DEAL_RESULTS_STORAGE_KEY, JSON.stringify(next));
+  return next;
+}
+
+export async function saveDealResults(deals: DealResult[]) {
+  await saveSharedState("deals", deals);
+  writeDealResults(deals);
 }
 
 export function subscribeDealResults(listener: () => void) {

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { readGalleryImages, subscribeGalleryImages } from "@/lib/data/gallery-overrides";
+import { fetchGalleryImages, readGalleryImages, subscribeGalleryImages } from "@/lib/data/gallery-overrides";
 import type { GalleryImage } from "@/types/domain";
 
 export function GallerySlider({ images: initialImages, compact = false }: { images: GalleryImage[]; compact?: boolean }) {
@@ -12,7 +12,7 @@ export function GallerySlider({ images: initialImages, compact = false }: { imag
 
   useEffect(() => {
     const refresh = () => setImages(readGalleryImages(initialImages));
-    refresh();
+    void fetchGalleryImages(initialImages).then(setImages).catch(refresh);
     return subscribeGalleryImages(refresh);
   }, [initialImages]);
 

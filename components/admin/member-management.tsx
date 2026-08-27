@@ -3,8 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Download, Plus, Trash2, Upload } from "lucide-react";
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { applyMemberOverrides, deleteMemberRecord, readMemberAdditions, readMemberOverrides, writeMemberAdditions } from "@/lib/data/member-overrides";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { deleteSharedMember, fetchManagedMembers, saveMemberAddition } from "@/lib/data/member-overrides";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
@@ -13,10 +13,11 @@ const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容な�
 
 export function MemberManagement({ initialMembers }: { initialMembers: Member[] }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [members, setMembers] = useState<Member[]>(() => applyMemberOverrides(initialMembers, readMemberOverrides()));
+  const [members, setMembers] = useState<Member[]>(initialMembers);
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [newMember, setNewMember] = useState({
     memberNo: "",
     name: "",
@@ -29,15 +30,26 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
 
   const sortedMembers = useMemo(() => sortMembersForDirectory(members), [members]);
 
-  function confirmDeleteMember() {
+  useEffect(() => {
+    void fetchManagedMembers(initialMembers).then(setMembers).catch(() => setMessage("共有データを読み込めませんでした。再読み込みしてください。"));
+  }, [initialMembers]);
+
+  async function confirmDeleteMember() {
     if (!memberToDelete) return;
-    deleteMemberRecord(memberToDelete.id);
-    setMembers((current) => current.filter((member) => member.id !== memberToDelete.id));
-    setMessage(`${memberToDelete.name}さんを削除しました。`);
-    setMemberToDelete(null);
+    setIsSaving(true);
+    try {
+      await deleteSharedMember(memberToDelete.id);
+      setMembers((current) => current.filter((member) => member.id !== memberToDelete.id));
+      setMessage(`${memberToDelete.name}さんを削除しました。`);
+      setMemberToDelete(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "削除できませんでした。");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function addMember(event: FormEvent<HTMLFormElement>) {
+  async function addMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!newMember.memberNo || !newMember.name) return;
     const addition: Member = {
@@ -60,11 +72,16 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
       status: "在籍",
       isVisible: true
     };
-    const additions = [...readMemberAdditions(), addition];
-    writeMemberAdditions(additions);
-    setMembers((current) => [...current, addition]);
-    setMessage("新規会員を登録しました。");
-    setIsNewOpen(false);
+    setIsSaving(true);
+    try {
+      setMembers(await saveMemberAddition(initialMembers, addition));
+      setMessage("新規会員を登録しました。");
+      setIsNewOpen(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "会員を登録できませんでした。");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   function exportCsv() {
@@ -126,9 +143,14 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
           isVisible: true
         };
       });
-    writeMemberAdditions(imported);
-    setMembers([...initialMembers, ...imported]);
-    setMessage(`${imported.length}名をCSVからインポートしました。`);
+    try {
+      let next = members;
+      for (const member of imported) next = await saveMemberAddition(initialMembers, member);
+      setMembers(next);
+      setMessage(`${imported.length}名をCSVからインポートしました。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "CSVをインポートできませんでした。");
+    }
     event.target.value = "";
   }
 
@@ -173,7 +195,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
             <span className="font-bold text-deep">テーブルリーダー権限あり</span>
           </label>
           <div className="md:col-span-2">
-            <button type="submit" className="focus-ring rounded bg-forest px-5 py-3 text-sm font-bold text-white">登録する</button>
+            <button type="submit" disabled={isSaving} className="focus-ring rounded bg-forest px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{isSaving ? "保存中..." : "登録する"}</button>
           </div>
         </form>
       )}
@@ -238,9 +260,9 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
               <button type="button" onClick={() => setMemberToDelete(null)} className="focus-ring rounded border border-slate-200 px-4 py-2 font-bold text-deep hover:bg-snow">
                 キャンセル
               </button>
-              <button type="button" onClick={confirmDeleteMember} className="focus-ring inline-flex items-center gap-2 rounded bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700">
+              <button type="button" disabled={isSaving} onClick={confirmDeleteMember} className="focus-ring inline-flex items-center gap-2 rounded bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700 disabled:opacity-50">
                 <Trash2 size={16} />
-                削除を確定する
+                {isSaving ? "削除中..." : "削除を確定する"}
               </button>
             </div>
           </div>

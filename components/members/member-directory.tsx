@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
+import { fetchManagedMembers } from "@/lib/data/member-overrides";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
 import { SocialLinks } from "@/components/members/social-links";
 import type { Member } from "@/types/domain";
@@ -13,7 +13,7 @@ export function MemberDirectory({ initialMembers, q, major, role }: { initialMem
   const [members, setMembers] = useState(initialMembers);
 
   useEffect(() => {
-    setMembers(applyMemberOverrides(initialMembers, readMemberOverrides()));
+    void fetchManagedMembers(initialMembers).then(setMembers).catch(() => setMembers(initialMembers));
   }, [initialMembers]);
 
   const visible = useMemo(() => {

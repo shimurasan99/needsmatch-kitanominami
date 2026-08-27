@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ImagePlus, Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
-import { readGalleryImages, writeGalleryImages } from "@/lib/data/gallery-overrides";
+import { fetchGalleryImages, saveGalleryImages } from "@/lib/data/gallery-overrides";
 import type { GalleryImage } from "@/types/domain";
 
 const maxImages = 10;
@@ -11,9 +11,10 @@ const maxImages = 10;
 export function GalleryManager({ initialImages }: { initialImages: GalleryImage[] }) {
   const [images, setImages] = useState<GalleryImage[]>(initialImages.slice(0, maxImages));
   const [saved, setSaved] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setImages(readGalleryImages(initialImages));
+    void fetchGalleryImages(initialImages).then(setImages).catch(() => setMessage("共有データを読み込めませんでした。"));
   }, [initialImages]);
 
   function updateImage(id: string, field: keyof Omit<GalleryImage, "id">, value: string) {
@@ -41,15 +42,15 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
     setImages((current) => current.filter((image) => image.id !== id));
   }
 
-  function saveImages() {
-    writeGalleryImages(images);
-    setSaved(true);
+  async function saveImages() {
+    try { await saveGalleryImages(images); setSaved(true); setMessage(""); }
+    catch (error) { setSaved(false); setMessage(error instanceof Error ? error.message : "保存できませんでした。"); }
   }
 
-  function resetImages() {
+  async function resetImages() {
     setImages(initialImages.slice(0, maxImages));
-    writeGalleryImages(initialImages.slice(0, maxImages));
-    setSaved(true);
+    try { await saveGalleryImages(initialImages.slice(0, maxImages)); setSaved(true); }
+    catch { setMessage("初期状態を保存できませんでした。"); }
   }
 
   async function uploadImage(id: string, file: File | undefined) {
@@ -85,6 +86,7 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
           </div>
         </div>
         {saved && <p className="mt-4 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-forest">保存しました。トップページと支部紹介ページのギャラリーへ反映されます。</p>}
+        {message && <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{message}</p>}
       </div>
 
       <div className="grid gap-4">

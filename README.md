@@ -25,7 +25,7 @@ npm run dev
 ## Supabase 設定
 
 1. Supabase プロジェクトを作成します。
-2. `supabase/migrations/001_initial_schema.sql` を SQL Editor で実行します。
+2. `supabase/migrations` 内のSQLを番号順に SQL Editor で実行します。既存環境では未適用の番号だけを実行してください。
 3. `supabase/seed.sql` を実行して初期データを投入します。
 4. `.env.example` を参考に環境変数を設定します。
 
@@ -73,3 +73,7 @@ Supabase Row Level Security はマイグレーションに含めています。�
 - Supabase Storage へプロフィール画像とギャラリー画像をアップロード
 - PDF出力、CSV出力を実データに接続
 - 共通パスワード認証を Cookie ベースで実装
+
+## 共有データ保存
+
+`004_shared_site_state.sql` で、会員情報・会員写真・商談成立実績・ギャラリー・スレッド・公開テーブル割りを端末間で共有するテーブルを追加します。Vercelへ反映する前にSupabaseのSQL Editorでこのマイグレーションを実行してください。未適用の場合、管理画面には保存エラーが表示され、端末内だけで保存済みと誤表示することはありません。

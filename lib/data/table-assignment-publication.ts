@@ -1,6 +1,7 @@
 "use client";
 
 import type { AssignmentTable } from "@/types/domain";
+import { fetchSharedState, saveSharedState } from "@/lib/data/shared-state";
 
 export type PublishedTableAssignment = {
   meetingId: string;
@@ -28,7 +29,14 @@ export function readPublishedTableAssignment(meetingId: string) {
   return readPublishedTableAssignments()[meetingId] ?? null;
 }
 
-export function publishTableAssignment(meetingId: string, tables: AssignmentTable[]) {
+export async function fetchPublishedTableAssignments() {
+  const shared = await fetchSharedState<PublishedAssignments>("table-assignments");
+  const next = shared ?? readPublishedTableAssignments();
+  window.localStorage.setItem(PUBLISHED_TABLE_ASSIGNMENTS_KEY, JSON.stringify(next));
+  return next;
+}
+
+export async function publishTableAssignment(meetingId: string, tables: AssignmentTable[]) {
   const current = readPublishedTableAssignments();
   const next: PublishedTableAssignment = {
     meetingId,
@@ -36,7 +44,9 @@ export function publishTableAssignment(meetingId: string, tables: AssignmentTabl
     publishedAt: new Date().toISOString()
   };
 
-  window.localStorage.setItem(PUBLISHED_TABLE_ASSIGNMENTS_KEY, JSON.stringify({ ...current, [meetingId]: next }));
+  const all = { ...current, [meetingId]: next };
+  await saveSharedState("table-assignments", all);
+  window.localStorage.setItem(PUBLISHED_TABLE_ASSIGNMENTS_KEY, JSON.stringify(all));
   window.dispatchEvent(new CustomEvent(TABLE_ASSIGNMENT_PUBLISHED_EVENT, { detail: { meetingId } }));
   return next;
 }

@@ -3,7 +3,7 @@
 import { Crown, RefreshCw, Send } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { EditableTableAssignment } from "@/components/table-assignment/editable-table-assignment";
-import { applyMemberOverrides, readMemberOverrides } from "@/lib/data/member-overrides";
+import { fetchManagedMembers } from "@/lib/data/member-overrides";
 import { fetchStoredParticipants, formatLocalUpdatedAt, storedParticipantsValueToParticipants, subscribeStoredParticipants, type StoredParticipants } from "@/lib/data/participant-storage";
 import { publishTableAssignment, readPublishedTableAssignment } from "@/lib/data/table-assignment-publication";
 import { generateTableAssignment } from "@/lib/table-assignment/generator";
@@ -77,7 +77,7 @@ export function TableAssignmentManager({
   const [publishedAt, setPublishedAt] = useState<string | undefined>();
 
   useEffect(() => {
-    setMembers(applyMemberOverrides(initialMembers, readMemberOverrides()));
+    void fetchManagedMembers(initialMembers).then(setMembers).catch(() => setMembers(initialMembers));
     setCurrentAssignment(readCurrentAssignment(meetingId));
     setPublishedAt(readPublishedTableAssignment(meetingId)?.publishedAt);
   }, [initialMembers, meetingId]);
@@ -117,10 +117,14 @@ export function TableAssignmentManager({
     setCurrentAssignment(next);
   }
 
-  function publishCurrentTables() {
+  async function publishCurrentTables() {
     if (!currentAssignment) return;
-    const published = publishTableAssignment(meetingId, currentAssignment.tables);
-    setPublishedAt(published.publishedAt);
+    try {
+      const published = await publishTableAssignment(meetingId, currentAssignment.tables);
+      setPublishedAt(published.publishedAt);
+    } catch {
+      window.alert("テーブル割りをサーバーへ公開できませんでした。");
+    }
   }
 
   return (
