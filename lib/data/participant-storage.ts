@@ -15,15 +15,17 @@ export type StoredGuestEntry = {
 
 export type StoredParticipants = {
   statuses?: Record<string, StoredParticipantStatus>;
+  versions?: Record<string, string | null>;
+  expectedVersions?: Record<string, string | null>;
   guests?: StoredGuestEntry[];
   updatedAt?: string;
-  guestsUpdatedAt?: string;
+  guestsUpdatedAt?: string | null;
 };
 
 export const PARTICIPANT_UPDATED_EVENT = "nm-participants-updated";
 
 export function participantStorageKey(meetingId: string) {
-  return `nm_meeting_participants_${meetingId}`;
+  return `nm_meeting_participants_server_v2_${meetingId}`;
 }
 
 export function readStoredParticipants(meetingId: string): StoredParticipants | null {
@@ -54,18 +56,21 @@ export async function fetchStoredParticipants(meetingId: string): Promise<Stored
   }
 }
 
-export async function saveMemberAttendance(meetingId: string, memberId: string, status: StoredParticipantStatus) {
-  const current = readStoredParticipants(meetingId) ?? {};
-  const fallback = { ...current, statuses: { ...current.statuses, [memberId]: status }, updatedAt: new Date().toISOString() };
+export async function saveMemberAttendance(meetingId: string, memberId: string, status: StoredParticipantStatus, expectedVersion: string | null) {
   const response = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}/attendance`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ memberId, status })
+    body: JSON.stringify({ memberId, status, expectedVersions: { [memberId]: expectedVersion } })
   });
   if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || "出欠を保存できませんでした。"); }
-  const result = await response.json() as { updatedAt?: string };
-  writeStoredParticipants(meetingId, { ...fallback, updatedAt: result.updatedAt ?? fallback.updatedAt });
-  return result.updatedAt ?? fallback.updatedAt;
+  const committed = await response.json() as StoredParticipants;
+  if (committed.statuses?.[memberId] !== status || !committed.versions?.[memberId]) throw new Error("保存結果を確認できませんでした。最新の出欠を確認してください。");
+  const saved = await fetchStoredParticipants(meetingId);
+  if (!saved || saved.statuses?.[memberId] !== status) {
+    throw new Error("保存後の出欠を確認できませんでした。他の画面で更新された可能性があります。最新の内容を読み込んで、もう一度確認してください。");
+  }
+  writeStoredParticipants(meetingId, saved);
+  return saved;
 }
 
 export async function saveAllParticipants(meetingId: string, value: StoredParticipants) {
@@ -75,10 +80,21 @@ export async function saveAllParticipants(meetingId: string, value: StoredPartic
     body: JSON.stringify(value)
   });
   if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || "参加者情報を保存できませんでした。"); }
-  await response.json();
-  const saved = await fetchStoredParticipants(meetingId) ?? value;
+  const committed = await response.json() as StoredParticipants;
+  if (!committed.statuses || !committed.versions || Object.entries(value.statuses ?? {}).some(([id, status]) => committed.statuses?.[id] !== status || !committed.versions?.[id])
+    || (value.guests !== undefined && !sameGuestList(committed.guests ?? [], value.guests))) throw new Error("保存結果を確認できませんでした。入力内容を保持しています。");
+  const saved = await fetchStoredParticipants(meetingId);
+  if (!saved || Object.entries(value.statuses ?? {}).some(([id, status]) => saved.statuses?.[id] !== status)
+    || (value.guests !== undefined && !sameGuestList(saved.guests ?? [], value.guests))) {
+    throw new Error("保存後の参加者情報が送信内容と一致しません。他の画面で更新された可能性があります。入力内容は保持しています。最新の内容を確認してから保存してください。");
+  }
   writeStoredParticipants(meetingId, saved);
   return saved;
+}
+
+function sameGuestList(actual: StoredGuestEntry[], expected: StoredGuestEntry[]) {
+  const normalize = (guest: StoredGuestEntry) => JSON.stringify(Object.entries(guest).sort(([a], [b]) => a.localeCompare(b)));
+  return actual.length === expected.length && actual.every((guest, index) => normalize(guest) === normalize(expected[index]));
 }
 
 export function subscribeStoredParticipants(meetingId: string, listener: () => void) {

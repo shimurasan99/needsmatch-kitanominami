@@ -12,7 +12,7 @@ function load(relative, mocks = {}) {
   const filename = path.join(__dirname, '..', relative);
   const loaded = new Module(filename, module);
   loaded.paths = module.paths;
-  loaded.require = (id) => Object.hasOwn(mocks, id) ? mocks[id] : id === '@/lib/table-assignment/snapshot' ? load('lib/table-assignment/snapshot.ts') : require(id);
+  loaded.require = (id) => Object.hasOwn(mocks, id) ? mocks[id] : id === '@/lib/table-assignment/snapshot' ? load('lib/table-assignment/snapshot.ts') : id === '@/lib/table-assignment/member-identity' ? load('lib/table-assignment/member-identity.ts') : id === '@/lib/data/table-assignment-recovery' ? load('lib/data/table-assignment-recovery.ts') : require(id);
   loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX }
   }).outputText, filename);
@@ -27,7 +27,8 @@ const names = (tables) => tables.map((table) => table.seats.map((s) => s.member.
 const text = (root) => JSON.stringify(root.toJSON());
 function storage() {
   const values = new Map();
-  global.window = { localStorage: { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }, confirm: () => true };
+  global.window = { localStorage: { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), get length() { return values.size; }, key: (index) => [...values.keys()][index] ?? null }, confirm: () => true, addEventListener() {}, removeEventListener() {}, setInterval() { return 1; }, clearInterval() {} };
+  global.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
   return values;
 }
 function saveButton(renderer) { return renderer.root.findAllByType('button').find((button) => button.props.onClick?.name === 'saveTables'); }
@@ -295,8 +296,17 @@ test('saved and published seating snapshots omit embedded images and contacts wh
     '@/lib/data/shared-state': { updateSharedState: async (key, update) => { database[key] = update(database[key]); return database[key]; } }
   });
   await saveTableAssignment('current', { tables, updatedAt: 'now' }, null);
-  await publishTableAssignment('current', tables);
-  for (const records of Object.values(database)) {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    assert.match(url, /\/current\/table-assignment-publication$/);
+    assert.deepEqual(JSON.parse(options.body), { expectedSavedRevision: 'now', expectedPublishedRevision: null });
+    const publication = { meetingId: 'current', tables: database['table-assignment-drafts'].current.tables, publishedAt: 'published-now' };
+    database['table-assignments'].current = publication;
+    return new Response(JSON.stringify({ publication }), { status: 200 });
+  };
+  await publishTableAssignment('current', 'now', null);
+  global.fetch = originalFetch;
+  for (const records of [database['table-assignment-drafts'], { current: database['table-assignments'].current }]) {
     assert.doesNotMatch(JSON.stringify(records), /LARGE_IMAGE|LONG_BIO|private-/);
     assert.doesNotMatch(JSON.stringify(records), /private@example/);
     for (const record of Object.values(records)) {
@@ -306,4 +316,142 @@ test('saved and published seating snapshots omit embedded images and contacts wh
     }
   }
   assert.equal(member.profileImageUrl, 'data:image/png;base64,LARGE_IMAGE', 'original member data must not be mutated');
+});
+
+test('legacy normal/past/size-specific/publication records remain discoverable without writing or inventing history', async () => {
+  const values = storage();
+  const july = 'meeting-2026-07';
+  const august = 'meeting-2026-08';
+  values.set(`nm_current_table_assignment_${july}`, JSON.stringify({ tables: initial, updatedAt: '2026-07-01' }));
+  values.set(`past-table-assignment-${july}`, JSON.stringify({ tables: initial, updatedAt: '2026-07-02' }));
+  values.set(`draft-table-assignment-${july}-8`, JSON.stringify({ tables: initial, updatedAt: '2026-07-03' }));
+  values.set(`latest-table-assignment-${july}-5`, JSON.stringify({ tables: initial, updatedAt: '2026-07-01' }));
+  values.set('nm_published_table_assignments', JSON.stringify({ [august]: { tables: initial, publishedAt: '2026-08-01' } }));
+  values.set('past-table-assignment-invalid', JSON.stringify({ tables: [{ tableName: 'A', seats: [null] }] }));
+  const before = [...values];
+  const recovery = load('lib/data/table-assignment-recovery.ts');
+  const candidates = recovery.readTableRecoveryCandidates(july);
+  assert.equal(candidates.length, 4);
+  assert.equal(candidates[0].seatsPerTable, 8);
+  assert.deepEqual(new Set(recovery.readTableRecoveryMeetingIds()), new Set([july, august]));
+  assert.deepEqual(recovery.readTableRecoveryCandidates('meeting-never-saved'), []);
+  assert.deepEqual([...values], before, 'discovery never rewrites the evidence');
+});
+
+test('empty shared publication fetch cannot overwrite old browser-only published history', async () => {
+  const values = storage();
+  const original = JSON.stringify({ 'meeting-2026-07': { tables: initial, publishedAt: '2026-07-17' } });
+  values.set('nm_published_table_assignments', original);
+  const { fetchPublishedTableAssignments } = load('lib/data/table-assignment-publication.ts', {
+    '@/lib/data/shared-state': { fetchSharedState: async () => null }
+  });
+  assert.deepEqual(await fetchPublishedTableAssignments(), {});
+  assert.equal(values.get('nm_published_table_assignments'), original);
+  assert.equal(values.get('nm_published_table_assignments_shared_v2'), '{}');
+  assert.equal(load('lib/data/table-assignment-recovery.ts').readTableRecoveryCandidates('meeting-2026-07').length, 1);
+});
+
+test('legacy recovery preview only loads editor; shared save requires explicit Save and preserves original evidence', async () => {
+  const values = storage();
+  const sourceKey = 'past-table-assignment-july';
+  const source = JSON.stringify({ tables: initial, updatedAt: '2026-07-17' });
+  values.set(sourceKey, source);
+  values.set('draft-table-assignment-july', source);
+  let saves = 0;
+  const meetings = [{ id: 'july', date: '2026-07-17', status: '終了' }];
+  const { TableAssignmentManager: Manager } = load('components/admin/table-assignment-manager.tsx', {
+    '@/components/table-assignment/editable-table-assignment': { EditableTableAssignment: Editor },
+    '@/lib/data/member-overrides': { fetchManagedMembers: async () => [] },
+    '@/lib/data/participant-storage': { fetchStoredParticipants: async () => ({}), formatLocalUpdatedAt: (value) => value ?? '', storedParticipantsValueToParticipants: () => [], subscribeStoredParticipants: () => () => {} },
+    '@/lib/data/meeting-storage': { fetchMeetings: async () => meetings },
+    '@/lib/data/table-assignment-publication': { fetchSavedTableAssignments: async () => ({}), fetchPublishedTableAssignments: async () => ({}), saveTableAssignment: async () => { saves++; } },
+    '@/lib/table-assignment/generator': { generateTableAssignment: () => { throw new Error('Recovery must not regenerate history'); } }
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(Manager, { meetingId: 'july', initialMembers: [], initialParticipants: [], initialMeetings: meetings, initialSeatsPerTable: 5 })); });
+  assert.equal(saves, 0);
+  assert.equal(renderer.root.findByType(Editor).props.initialTables.length, 2, 'manager restores and verifies the browser-only draft before showing the editor');
+  let confirmations = 0;
+  window.confirm = () => { confirmations++; return false; };
+  await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  assert.equal(confirmations, 1, 'generation must confirm even when parent tables are empty');
+  assert.equal(values.get('draft-table-assignment-july'), source);
+  const restore = renderer.root.findAllByType('button').find((button) => button.children.includes('この内容を編集欄へ読み込む'));
+  await act(async () => restore.props.onClick());
+  assert.equal(confirmations, 2);
+  assert.equal(values.get('draft-table-assignment-july'), source);
+  window.confirm = () => true;
+  await act(async () => restore.props.onClick());
+  assert([...values].some(([key, value]) => key.startsWith('nm_table_assignment_recovery_july::') && value === source), 'replacement preserves the previous draft');
+  assert.equal(saves, 0);
+  assert.deepEqual(renderer.root.findByType(Editor).props.initialTables.map((table) => table.seats.map((seat) => seat.member.name)), names(initial));
+  await act(async () => saveButton(renderer).props.onClick());
+  assert.equal(saves, 1);
+  assert.equal(values.get(sourceKey), source);
+  await act(async () => renderer.unmount());
+});
+
+test('draft backup failure prevents replacing the only browser copy', () => {
+  const values = storage();
+  const raw = JSON.stringify({ tables: initial, updatedAt: '2026-07-17' });
+  values.set('draft-table-assignment-july', raw);
+  window.localStorage.setItem = () => { throw new Error('QuotaExceeded'); };
+  assert.throws(() => load('lib/data/table-assignment-recovery.ts').preserveTableDraft('july'), /保管できません/);
+  assert.equal(values.get('draft-table-assignment-july'), raw);
+});
+
+test('focus/timer attendance refresh never resets editor; generation refetches all inputs, locks duplicates and preserves edits on failure', async () => {
+  storage();
+  const listeners = {};
+  let tick;
+  window.addEventListener = (name, callback) => { listeners[name] = callback; };
+  document.addEventListener = (name, callback) => { listeners[name] = callback; };
+  window.setInterval = (callback, delay) => { assert.equal(delay, 30000); tick = callback; return 1; };
+  let version = 1, generations = 0, attendanceCalls = 0, fail = false, gate = null;
+  let received;
+  const meetings = [{ id: 'current', date: '2026-09-01', status: '確定' }, { id: 'previous', date: '2026-08-01', status: '終了' }];
+  const { TableAssignmentManager: Manager } = load('components/admin/table-assignment-manager.tsx', {
+    '@/components/table-assignment/editable-table-assignment': { EditableTableAssignment: Editor },
+    '@/lib/data/member-overrides': { fetchManagedMembers: async () => Array.from({ length: version }, (_, i) => ({ id: `m${i}`, name: `m${i}` })) },
+    '@/lib/data/participant-storage': {
+      fetchStoredParticipants: async () => { attendanceCalls++; if (gate) await gate; if (fail) throw new Error('Read failed'); return { statuses: Object.fromEntries(Array.from({ length: version }, (_, i) => [`m${i}`, '参加'])) }; },
+      formatLocalUpdatedAt: () => '', subscribeStoredParticipants: () => () => {},
+      storedParticipantsValueToParticipants: (_, members, __, stored) => members.filter((member) => stored?.statuses?.[member.id] === '参加').map((member) => ({ memberId: member.id, status: '参加' }))
+    },
+    '@/lib/data/meeting-storage': { fetchMeetings: async () => meetings },
+    '@/lib/data/table-assignment-publication': { fetchSavedTableAssignments: async () => ({}), fetchPublishedTableAssignments: async () => ({ previous: { tables: [{ tableName: `history-${version}`, seats: initial[0].seats }], publishedAt: '' } }) },
+    '@/lib/table-assignment/generator': { generateTableAssignment: (participants, members, history) => { generations++; received = { participants, members, history }; return { tables: initial, score: 0, warnings: [] }; } }
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(Manager, { meetingId: 'current', initialMembers: [], initialParticipants: [], initialMeetings: meetings, initialSeatsPerTable: 5 })); });
+  version = 2;
+  await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  assert.equal(received.participants.length, 2);
+  assert.equal(received.members.length, 2);
+  assert.equal(received.history[0].tableName, 'history-2');
+  await act(async () => renderer.root.findAllByType('select')[1].props.onChange({ target: { value: 'Bテーブル' } }));
+  const before = window.localStorage.getItem('draft-table-assignment-current');
+  version = 3;
+  await act(async () => listeners.focus());
+  await act(async () => listeners.visibilitychange());
+  await act(async () => tick());
+  assert.match(text(renderer), /参加設定:.*3.*名/);
+  assert.equal(generations, 1);
+  assert.equal(window.localStorage.getItem('draft-table-assignment-current'), before);
+  fail = true;
+  await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  assert.match(text(renderer), /Read failed/);
+  assert.equal(generations, 1);
+  assert.equal(window.localStorage.getItem('draft-table-assignment-current'), before);
+  fail = false;
+  let release;
+  gate = new Promise((resolve) => { release = resolve; });
+  let pending;
+  const startCount = attendanceCalls;
+  await act(async () => { pending = renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }); });
+  await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  assert.equal(attendanceCalls, startCount + 1);
+  await act(async () => { release(); await pending; });
+  assert.equal(generations, 2);
+  await act(async () => renderer.unmount());
 });

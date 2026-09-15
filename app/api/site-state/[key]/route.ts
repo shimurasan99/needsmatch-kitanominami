@@ -25,6 +25,7 @@ export async function PUT(request: NextRequest, { params: paramsPromise }: { par
   if (!(await isAdminRequest(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (params.key === "table-assignments") return NextResponse.json({ error: "公開機能が更新されました。ページを再読み込みし、テーブル割り画面から公開してください。" }, { status: 428 });
   const supabase = createSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: "Shared storage is not configured" }, { status: 503 });
   const version = request.headers.get("if-match");

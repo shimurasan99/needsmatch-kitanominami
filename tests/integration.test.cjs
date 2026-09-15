@@ -9,6 +9,7 @@ const path = require('node:path');
 const Module = require('node:module');
 const ts = require('typescript');
 const { NextRequest } = require('next/server');
+const { saveAttendance } = require('./attendance-rpc-fixture.cjs');
 
 process.env.AUTH_SESSION_SECRET = 'integration-test-only-session-secret-not-used-outside-tests';
 process.env.ADMIN_SHARED_PASSWORD = 'integration-admin-password';
@@ -31,6 +32,7 @@ class Database {
   constructor() { this.tables = new Map(); this.failure = null; }
   from(table) { if (!this.tables.has(table)) this.tables.set(table, []); return new Query(this, table); }
   rows(table) { return structuredClone(this.tables.get(table) ?? []); }
+  async rpc(name, args) { assert.equal(name, 'save_attendance_atomic'); return saveAttendance(this.tables, args, this.failAttendanceAfterStatuses); }
 }
 class Query {
   constructor(database, table) { this.database = database; this.table = table; this.action = 'read'; this.filters = []; }
@@ -195,21 +197,43 @@ test('attendance uses signed sessions, targeted writes preserve other responses,
   const params = { params: Promise.resolve({ id: 'september' }) };
   assert.equal((await attendance.GET(request(), params)).status, 401);
   assert.equal((await attendance.GET(request('GET', undefined, 'nm_admin_auth=ok'), params)).status, 401);
-  assert.equal((await attendance.PUT(request('PUT', { memberId: 'a', status: '参加' }, member), params)).status, 200);
-  assert.equal((await attendance.PUT(request('PUT', { memberId: 'b', status: '未定' }, member), params)).status, 200);
+  assert.equal((await attendance.PUT(request('PUT', { memberId: 'a', status: '参加', expectedVersions: { a: null } }, member), params)).status, 200);
+  assert.equal((await attendance.PUT(request('PUT', { memberId: 'b', status: '未定', expectedVersions: { b: null } }, member), params)).status, 200);
   const guests = [{ id: 'guest-1', name: 'Fixture guest', company: '', industry: '', type: '新規', branchName: '' }];
   assert.equal((await attendance.PUT(request('PUT', { statuses: {}, guests }, member), params)).status, 403);
-  assert.equal((await attendance.PUT(request('PUT', { statuses: {}, guests }, admin), params)).status, 200);
+  assert.equal((await attendance.PUT(request('PUT', { statuses: {}, expectedVersions: {}, guests, guestsUpdatedAt: null }, admin), params)).status, 200);
   const first = await (await attendance.GET(request('GET', undefined, admin), params)).json();
   assert.deepEqual(first.statuses, { a: '参加', b: '未定' });
-  assert.equal((await attendance.PUT(request('PUT', { statuses: { a: '欠席' } }, admin), params)).status, 200);
+  assert.equal((await attendance.PUT(request('PUT', { statuses: { a: '欠席' }, expectedVersions: { a: first.versions.a } }, admin), params)).status, 200);
   const targeted = await (await attendance.GET(request('GET', undefined, member), params)).json();
   assert.deepEqual(targeted.statuses, { a: '欠席', b: '未定' });
   assert.deepEqual(targeted.guests, guests, 'omitted guests must not erase existing guest list');
-  assert.equal((await attendance.PUT(request('PUT', { statuses: {}, guests: [], guestsUpdatedAt: first.guestsUpdatedAt }, admin), params)).status, 200);
-  assert.equal((await attendance.PUT(request('PUT', { statuses: { b: '欠席' }, guests, guestsUpdatedAt: first.guestsUpdatedAt }, admin), params)).status, 409);
+  assert.equal((await attendance.PUT(request('PUT', { statuses: {}, expectedVersions: {}, guests: [], guestsUpdatedAt: first.guestsUpdatedAt }, admin), params)).status, 200);
+  assert.equal((await attendance.PUT(request('PUT', { statuses: { b: '欠席' }, expectedVersions: { b: first.versions.b }, guests, guestsUpdatedAt: first.guestsUpdatedAt }, admin), params)).status, 409);
   const afterConflict = await (await attendance.GET(request('GET', undefined, admin), params)).json();
   assert.equal(afterConflict.statuses.b, '未定', 'guest conflict must be detected before changing statuses');
   assert.deepEqual(afterConflict.guests, []);
-  for (const invalid of [null, { statuses: [] }, { statuses: { a: 'wrong' } }, { statuses: {}, guests: [{ id: 'g', name: '' }] }]) assert.equal((await attendance.PUT(request('PUT', invalid, admin), params)).status, 400);
+  for (const invalid of [null, { statuses: [] }, { statuses: { a: 'wrong' } }, { statuses: {}, expectedVersions: {}, guests: [{ id: 'g', name: '' }] }]) assert.equal((await attendance.PUT(request('PUT', invalid, admin), params)).status, 400);
+});
+
+test('attendance member-vs-admin revision conflicts and legacy writes cannot overwrite current data; guest failure rolls back both tables', async () => {
+  const db = new Database();
+  const { attendance } = routes(db);
+  const admin = `nm_admin_auth=${await auth.createSessionToken('admin')}`;
+  const member = `nm_member_auth=${await auth.createSessionToken('member')}`;
+  const params = { params: Promise.resolve({ id: 'meeting' }) };
+  const first = await (await attendance.PUT(request('PUT', { memberId: 'a', status: '参加', expectedVersions: { a: null } }, member), params)).json();
+  assert.ok(first.versions.a);
+  const next = await (await attendance.PUT(request('PUT', { memberId: 'a', status: '欠席', expectedVersions: { a: first.versions.a } }, member), params)).json();
+  assert.notEqual(next.versions.a, first.versions.a);
+  const before = db.rows('attendance_responses');
+  assert.equal((await attendance.PUT(request('PUT', { statuses: { a: '未定' }, expectedVersions: { a: first.versions.a } }, admin), params)).status, 409);
+  assert.equal((await attendance.PUT(request('PUT', { statuses: { a: '未定' } }, admin), params)).status, 428);
+  assert.equal((await attendance.PUT(request('PUT', { memberId: 'a', status: '参加' }, member), params)).status, 428);
+  assert.equal((await attendance.PUT(request('PUT', { statuses: {}, expectedVersions: {}, guests: [], guestsUpdatedAt: 123 }, admin), params)).status, 400);
+  assert.deepEqual(db.rows('attendance_responses'), before);
+  db.failAttendanceAfterStatuses = true;
+  assert.equal((await attendance.PUT(request('PUT', { statuses: { a: '未定' }, expectedVersions: { a: next.versions.a }, guests: [{ id: 'g', name: 'Guest' }], guestsUpdatedAt: null }, admin), params)).status, 500);
+  assert.deepEqual(db.rows('attendance_responses'), before);
+  assert.deepEqual(db.rows('attendance_snapshots'), []);
 });

@@ -14,7 +14,8 @@ export type PublishedTableAssignment = {
   publishedAt: string;
 };
 
-const PUBLISHED_TABLE_ASSIGNMENTS_KEY = "nm_published_table_assignments";
+// Keep the old cache untouched: before shared storage, it could be the only saved copy.
+const PUBLISHED_TABLE_ASSIGNMENTS_KEY = "nm_published_table_assignments_shared_v2";
 export type SavedTableAssignment = { tables: AssignmentTable[]; updatedAt: string; seatsPerTable?: number };
 export type SavedAssignments = Record<string, SavedTableAssignment>;
 
@@ -56,14 +57,15 @@ export async function fetchPublishedTableAssignments() {
   return next;
 }
 
-export async function publishTableAssignment(meetingId: string, tables: AssignmentTable[]) {
-  const next: PublishedTableAssignment = {
-    meetingId,
-    tables: compactTableAssignment(tables),
-    publishedAt: new Date().toISOString()
-  };
-
-  const all = await updateSharedState<PublishedAssignments>("table-assignments", (current) => ({ ...compactAssignments(current), [meetingId]: next }));
+export async function publishTableAssignment(meetingId: string, expectedSavedRevision: string, expectedPublishedRevision: string | null) {
+  const response = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}/table-assignment-publication`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedSavedRevision, expectedPublishedRevision })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.publication) throw new Error(result.error || "公開できませんでした。再読み込みして公開状況を確認してください。");
+  const next = result.publication as PublishedTableAssignment;
+  const all = { ...readPublishedTableAssignments(), [meetingId]: next };
   try { window.localStorage.setItem(PUBLISHED_TABLE_ASSIGNMENTS_KEY, JSON.stringify(all)); } catch { /* Already saved on server. */ }
   window.dispatchEvent(new CustomEvent(TABLE_ASSIGNMENT_PUBLISHED_EVENT, { detail: { meetingId } }));
   return next;

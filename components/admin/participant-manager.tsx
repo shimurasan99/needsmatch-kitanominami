@@ -64,6 +64,9 @@ export function ParticipantManager({
   const [isReady, setIsReady] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | undefined>();
   const [savedMessage, setSavedMessage] = useState("");
+  const liveDraft = useRef({ statuses, guests, saving: isSaving });
+  liveDraft.current = { statuses, guests, saving: isSaving };
+  const readRevision = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -81,6 +84,41 @@ export function ParticipantManager({
     }).catch(error => { if (active) setSavedMessage(error.message); });
     return () => { active = false; };
   }, [initialMembers, initialParticipants, meetingId]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    let active = true;
+    const refresh = () => {
+      if (liveDraft.current.saving) return;
+      const revision = ++readRevision.current;
+      void fetchStoredParticipants(meetingId).then((saved) => {
+        if (!active || revision !== readRevision.current || liveDraft.current.saving || !saved) return;
+        const current = liveDraft.current;
+        const remote = { ...createInitialStatuses(members, []), ...saved.statuses } as Record<string, MemberAttendanceStatus>;
+        Object.keys(remote).forEach(id => { if (!statusOptions.includes(remote[id])) remote[id] = "欠席"; });
+        const next = { ...remote };
+        const nextBaseline = { ...remote };
+        const nextVersions = { ...saved.versions };
+        for (const [id, status] of Object.entries(current.statuses)) {
+          if (baseline.current.statuses?.[id] !== status) {
+            next[id] = status;
+            nextBaseline[id] = (baseline.current.statuses?.[id] ?? "未定") as MemberAttendanceStatus;
+            nextVersions[id] = baseline.current.versions?.[id] ?? null;
+          }
+        }
+        const guestsDirty = JSON.stringify(current.guests) !== JSON.stringify(baseline.current.guests ?? []);
+        baseline.current = { ...saved, statuses: nextBaseline, versions: nextVersions, ...(guestsDirty ? { guests: baseline.current.guests, guestsUpdatedAt: baseline.current.guestsUpdatedAt } : { guests: saved.guests ?? [] }) };
+        setStatuses(next);
+        if (!guestsDirty) setGuests(saved.guests ?? []);
+        setLastUpdatedAt(saved.updatedAt);
+      }).catch(error => { if (active && revision === readRevision.current) setSavedMessage(error.message); });
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(refresh, 30000);
+    return () => { active = false; window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", onVisible); window.clearInterval(timer); };
+  }, [isReady, meetingId, members]);
 
   const counts = useMemo(() => {
     return members.reduce(
@@ -103,13 +141,16 @@ export function ParticipantManager({
   }
 
   async function saveParticipants() {
-    if (!isReady || isSaving) return;
+    if (!isReady || isSaving || liveDraft.current.saving) return;
+    ++readRevision.current;
+    liveDraft.current.saving = true;
     setIsSaving(true);
     const updatedAt = new Date().toISOString();
     try {
       const changedStatuses = Object.fromEntries(Object.entries(statuses).filter(([id, status]) => baseline.current.statuses?.[id] !== status));
       const guestsChanged = JSON.stringify(guests) !== JSON.stringify(baseline.current.guests ?? []);
-      const saved = await saveAllParticipants(meetingId, { statuses: changedStatuses, ...(guestsChanged ? { guests, guestsUpdatedAt: baseline.current.guestsUpdatedAt } : {}), updatedAt });
+      const expectedVersions = Object.fromEntries(Object.keys(changedStatuses).map(id => [id, baseline.current.versions?.[id] ?? null]));
+      const saved = await saveAllParticipants(meetingId, { statuses: changedStatuses, expectedVersions, ...(guestsChanged ? { guests, guestsUpdatedAt: baseline.current.guestsUpdatedAt ?? null } : {}), updatedAt });
       const nextStatuses = { ...createInitialStatuses(members, []), ...saved.statuses } as Record<string, MemberAttendanceStatus>;
       Object.keys(nextStatuses).forEach(id => { if (!statusOptions.includes(nextStatuses[id])) nextStatuses[id] = "欠席"; });
       baseline.current = { ...saved, statuses: nextStatuses, guests: saved.guests ?? [] };
@@ -119,7 +160,7 @@ export function ParticipantManager({
       setSavedMessage("参加者情報を保存しました。");
     } catch (error) {
       setSavedMessage(error instanceof Error ? error.message : "参加者情報を保存できませんでした。");
-    } finally { setIsSaving(false); }
+    } finally { liveDraft.current.saving = false; setIsSaving(false); }
   }
 
   function addGuest(event: FormEvent<HTMLFormElement>) {

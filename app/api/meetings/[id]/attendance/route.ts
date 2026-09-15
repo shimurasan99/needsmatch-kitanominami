@@ -21,8 +21,9 @@ export async function GET(request: NextRequest, { params: paramsPromise }: { par
   }
 
   const statuses = Object.fromEntries((responses ?? []).map((row) => [row.member_key, row.status]));
+  const versions = Object.fromEntries((responses ?? []).map((row) => [row.member_key, row.updated_at]));
   const updatedAt = [...(responses ?? []).map((row) => row.updated_at), snapshot?.updated_at].filter(Boolean).sort().at(-1);
-  return NextResponse.json({ statuses, guests: snapshot?.guests ?? [], updatedAt, guestsUpdatedAt: snapshot?.updated_at }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ statuses, versions, guests: snapshot?.guests ?? [], updatedAt, guestsUpdatedAt: snapshot?.updated_at ?? null }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PUT(request: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
@@ -36,40 +37,32 @@ export async function PUT(request: NextRequest, { params: paramsPromise }: { par
     status?: StoredParticipantStatus;
     statuses?: Record<string, StoredParticipantStatus>;
     guests?: StoredGuestEntry[];
-    guestsUpdatedAt?: string;
+    guestsUpdatedAt?: string | null;
+    expectedVersions?: Record<string, string | null>;
   };
   if (!body || typeof body !== "object") return NextResponse.json({ error: "出欠の入力内容を確認してください。" }, { status: 400 });
-  if (body.guestsUpdatedAt && Number.isNaN(Date.parse(body.guestsUpdatedAt))) return NextResponse.json({ error: "ゲストの更新情報が正しくありません。" }, { status: 400 });
-  const updatedAt = new Date().toISOString();
-
-  if (body.memberId && body.status && allowedStatuses.has(body.status)) {
-    const { error } = await supabase.from("attendance_responses").upsert({
-      meeting_key: params.id,
-      member_key: body.memberId,
-      status: body.status,
-      updated_at: updatedAt
-    }, { onConflict: "meeting_key,member_key" });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ updatedAt });
+  if (body.guestsUpdatedAt !== undefined && body.guestsUpdatedAt !== null
+    && (typeof body.guestsUpdatedAt !== "string" || Number.isNaN(Date.parse(body.guestsUpdatedAt)))) return NextResponse.json({ error: "ゲストの更新情報が正しくありません。" }, { status: 400 });
+  const memberWrite = typeof body.memberId === "string" && !!body.memberId.trim() && body.status !== undefined;
+  if (!memberWrite && !(await isAdmin(request))) return NextResponse.json({ error: "管理者権限が必要です。" }, { status: 403 });
+  const statuses = memberWrite ? { [body.memberId!]: body.status! } : body.statuses;
+  if (!statuses || typeof statuses !== "object" || Array.isArray(statuses) || Object.entries(statuses).some(([id, status]) => !id.trim() || !allowedStatuses.has(status))) return NextResponse.json({ error: "出欠の入力内容を確認してください。" }, { status: 400 });
+  if (!body.expectedVersions || typeof body.expectedVersions !== "object" || Array.isArray(body.expectedVersions)
+    || Object.keys(statuses).some(id => !Object.hasOwn(body.expectedVersions!, id))) {
+    return NextResponse.json({ error: "古い画面からの保存を停止しました。ページを再読み込みして最新の回答を確認してください。" }, { status: 428 });
   }
-
-  if (!(await isAdmin(request))) return NextResponse.json({ error: "管理者権限が必要です。" }, { status: 403 });
-  if (!body.statuses || typeof body.statuses !== "object" || Array.isArray(body.statuses) || Object.values(body.statuses).some(status => !allowedStatuses.has(status))) return NextResponse.json({ error: "出欠の入力内容を確認してください。" }, { status: 400 });
+  if (Object.values(body.expectedVersions).some(value => value !== null && (typeof value !== "string" || Number.isNaN(Date.parse(value))))) return NextResponse.json({ error: "出欠の更新情報が正しくありません。再読み込みしてください。" }, { status: 400 });
+  if (memberWrite && body.guests !== undefined) return NextResponse.json({ error: "管理者画面からゲストを編集してください。" }, { status: 403 });
   if (body.guests !== undefined) {
     if (!Array.isArray(body.guests) || body.guests.some(guest => !guest?.id || typeof guest.name !== "string" || !guest.name.trim())) return NextResponse.json({ error: "ゲスト名を確認してください。" }, { status: 400 });
-    const row = { meeting_key: params.id, guests: body.guests, updated_at: new Date(Math.max(Date.now(), body.guestsUpdatedAt ? Date.parse(body.guestsUpdatedAt) + 1 : 0)).toISOString() };
-    const { data, error } = body.guestsUpdatedAt
-      ? await supabase.from("attendance_snapshots").update(row).eq("meeting_key", params.id).eq("updated_at", body.guestsUpdatedAt).select("updated_at").maybeSingle()
-      : await supabase.from("attendance_snapshots").insert(row).select("updated_at").maybeSingle();
-    if (error?.code === "23505" || (!error && !data)) return NextResponse.json({ error: "別の運営者がゲスト情報を更新しました。再読み込みして保存してください。" }, { status: 409 });
-    if (error) return NextResponse.json({ error: "ゲスト情報を保存できませんでした。" }, { status: 500 });
+    if (!Object.hasOwn(body, "guestsUpdatedAt")) return NextResponse.json({ error: "ゲスト情報を再読み込みしてから保存してください。" }, { status: 428 });
   }
-  const rows = Object.entries(body.statuses)
-    .filter(([, status]) => allowedStatuses.has(status))
-    .map(([memberId, status]) => ({ meeting_key: params.id, member_key: memberId, status, updated_at: updatedAt }));
-  const { error: responseError } = rows.length
-    ? await supabase.from("attendance_responses").upsert(rows, { onConflict: "meeting_key,member_key" })
-    : { error: null };
-  if (responseError) return NextResponse.json({ error: "出欠を保存できませんでした。再読み込みして保存内容を確認してください。" }, { status: 500 });
-  return NextResponse.json({ updatedAt });
+  const { data, error } = await supabase.rpc("save_attendance_atomic", {
+    p_meeting_key: params.id, p_statuses: statuses, p_expected_versions: body.expectedVersions,
+    p_guests: body.guests ?? null, p_expected_guests_at: body.guestsUpdatedAt ?? null
+  });
+  if (error?.code === "40001") return NextResponse.json({ error: "別の画面で出欠またはゲストが変更されました。保存は行っていません。再読み込みして最新の内容を確認してください。" }, { status: 409 });
+  if (error) return NextResponse.json({ error: "出欠を保存できませんでした。入力内容を保持しています。時間をおいて再度お試しください。" }, { status: 500 });
+  if (!data || typeof data !== "object") return NextResponse.json({ error: "保存結果を確認できませんでした。" }, { status: 500 });
+  return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
 }

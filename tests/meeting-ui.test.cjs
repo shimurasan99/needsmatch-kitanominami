@@ -7,6 +7,8 @@ const ts = require('typescript');
 const React = require('react');
 const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
+global.window = { addEventListener() {}, removeEventListener() {}, setInterval() { return 1; }, clearInterval() {} };
+global.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
 
 function load(relative, mocks) {
   const filename = path.join(__dirname, '..', relative);

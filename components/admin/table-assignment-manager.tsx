@@ -9,7 +9,23 @@ import { fetchPublishedTableAssignments, fetchSavedTableAssignments, publishTabl
 import { fetchMeetings } from "@/lib/data/meeting-storage";
 import { generateTableAssignment } from "@/lib/table-assignment/generator";
 import { compactTableAssignment } from "@/lib/table-assignment/snapshot";
+import { reconcileTableMembers } from "@/lib/table-assignment/member-identity";
+import { preserveTableDraft, readTableRecoveryCandidates, type TableRecoveryCandidate } from "@/lib/data/table-assignment-recovery";
 import type { AssignmentTable, Meeting, Member, Participant } from "@/types/domain";
+
+function assignmentHistory(meetingId: string, meetings: Meeting[], drafts: Record<string, SavedTableAssignment>, published: Record<string, { tables: AssignmentTable[]; publishedAt: string }>, members: Member[]) {
+  const current = meetings.find((meeting) => meeting.id === meetingId);
+  const previous = current ? meetings.filter((meeting) => meeting.status !== "下書き" && meeting.date < current.date).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 2) : [];
+  const tablesFor = (meeting: Meeting) => {
+    const draft = drafts[meeting.id];
+    const publication = published[meeting.id];
+    return (draft && (!publication || draft.updatedAt >= publication.publishedAt) ? draft.tables : publication?.tables) ?? [];
+  };
+  const missing = previous.filter((meeting) => !tablesFor(meeting).some((table) => table.seats.length));
+  const reconciled = reconcileTableMembers(previous.flatMap(tablesFor), members);
+  const missingMessage = !current ? "定例会の日付が見つからず、過去2回の履歴を確認できません。" : missing.length ? `過去の定例会 ${missing.map((meeting) => meeting.date).join("、")} のテーブル割りを共有保存先で確認できないため、その回の重複は確認できません。旧画面で保存した内容が当時の端末に残っている可能性があります。` : "";
+  return { tables: reconciled.tables, message: [missingMessage, reconciled.warning].filter(Boolean).join(" ") };
+}
 
 type StoredTableAssignment = SavedTableAssignment;
 
@@ -30,10 +46,6 @@ function readCurrentAssignment(meetingId: string): StoredTableAssignment | null 
   } catch {
     return null;
   }
-}
-
-function writeCurrentAssignment(meetingId: string, value: StoredTableAssignment) {
-  window.localStorage.setItem(currentAssignmentStorageKey(meetingId), JSON.stringify({ ...value, tables: compactTableAssignment(value.tables) }));
 }
 
 function normalizeTableNames(tables: AssignmentTable[]) {
@@ -76,19 +88,30 @@ export function TableAssignmentManager({
   const [draftSeatsPerTable, setDraftSeatsPerTable] = useState(initialSeatsPerTable);
   const [currentAssignment, setCurrentAssignment] = useState<StoredTableAssignment | null>(null);
   const [publishedAt, setPublishedAt] = useState<string | undefined>();
-  const [pastTables, setPastTables] = useState<AssignmentTable[]>([]);
   const [historyMessage, setHistoryMessage] = useState("");
   const [editor, setEditor] = useState<{ tables: AssignmentTable[]; score?: number; warnings?: string[]; revision: number; restoreDraft: boolean; savedAt?: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [savedVersion, setSavedVersion] = useState<string | null>(null);
+  const [recoveryCandidates, setRecoveryCandidates] = useState<TableRecoveryCandidate[]>([]);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const operation = useRef(false);
+  const lifetime = useRef(0);
+  const participantRequest = useRef(0);
 
   useEffect(() => {
     const { initialMembers, initialMeetings, initialSeatsPerTable } = initialData.current;
     let active = true;
+    const epoch = ++lifetime.current;
+    operation.current = false;
+    setBusy(false);
+    setPublishing(false);
     setReady(false);
     setError("");
+    setRecoveryCandidates(readTableRecoveryCandidates(meetingId));
+    setRecoveryMessage("");
     Promise.all([fetchManagedMembers(initialMembers), fetchStoredParticipants(meetingId), fetchSavedTableAssignments(), fetchPublishedTableAssignments(), fetchMeetings(initialMeetings)])
       .then(([nextMembers, participants, drafts, published, meetings]) => {
         if (!active) return;
@@ -98,37 +121,40 @@ export function TableAssignmentManager({
         const saved = drafts[meetingId] ?? (publication ? { tables: publication.tables, updatedAt: publication.publishedAt } : null);
         setSavedVersion(drafts[meetingId]?.updatedAt ?? null);
         const local = readCurrentAssignment(meetingId);
-        const initial = saved ?? local;
+        const browserDraft = readTableRecoveryCandidates(meetingId).find((candidate) => candidate.key === `draft-table-assignment-${meetingId}`);
+        const initial = browserDraft && (!saved || browserDraft.updatedAt > saved.updatedAt) ? browserDraft : saved ?? local;
         setCurrentAssignment(saved);
         setPublishedAt(publication?.publishedAt);
         const size = initial?.seatsPerTable ?? initialSeatsPerTable;
         setSeatsPerTable(size);
         setDraftSeatsPerTable(size);
-        setEditor({ tables: initial?.tables ?? [], revision: 0, restoreDraft: true, savedAt: saved?.updatedAt });
-        const currentMeeting = meetings.find((meeting) => meeting.id === meetingId);
-        const previous = currentMeeting ? meetings.filter((meeting) => meeting.status !== "下書き" && meeting.date < currentMeeting.date).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 2) : [];
-        const historyTables = (meeting: Meeting) => {
-          const draft = drafts[meeting.id];
-          const publication = published[meeting.id];
-          return (draft && (!publication || draft.updatedAt >= publication.publishedAt) ? draft.tables : publication?.tables) ?? [];
-        };
-        setPastTables(previous.flatMap(historyTables));
-        const missing = previous.filter((meeting) => !historyTables(meeting).some((table) => table.seats.length > 0));
-        setHistoryMessage(!currentMeeting ? "定例会の日付が見つからず、過去2回の履歴を確認できません。" : missing.length ? `過去の定例会 ${missing.map((meeting) => meeting.date).join("、")} の保存済みテーブル割りがないため、その回の重複は確認できません。` : "");
+        const reconciled = reconcileTableMembers(initial?.tables ?? [], nextMembers);
+        setEditor({ tables: reconciled.tables, revision: 0, restoreDraft: false, savedAt: saved?.updatedAt });
+        setRecoveryMessage(reconciled.warning);
+        setHistoryMessage(assignmentHistory(meetingId, meetings, drafts, published, nextMembers).message);
         setReady(true);
       }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "テーブル割りの読み込みに失敗しました。"); });
-    return () => { active = false; };
+    return () => { active = false; lifetime.current = epoch + 1; };
   }, [meetingId]);
 
   useEffect(() => {
+    let active = true;
     const refresh = () => {
-      void fetchStoredParticipants(meetingId).then((value) => {
+      if (operation.current) return;
+      const request = ++participantRequest.current;
+      void Promise.all([fetchManagedMembers(initialData.current.initialMembers), fetchStoredParticipants(meetingId)]).then(([nextMembers, value]) => {
+        if (!active || request !== participantRequest.current) return;
+        setMembers(nextMembers);
         setStoredParticipants(value);
         setParticipantVersion((current) => current + 1);
-      }).catch((cause) => setError(cause instanceof Error ? cause.message : "参加者の読み込みに失敗しました。"));
+      }).catch((cause) => { if (active && request === participantRequest.current) setError(cause instanceof Error ? cause.message : "参加者の読み込みに失敗しました。"); });
     };
-    refresh();
-    return subscribeStoredParticipants(meetingId, refresh);
+    const visible = () => { if (document.visibilityState === "visible") refresh(); };
+    const unsubscribe = subscribeStoredParticipants(meetingId, refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", visible);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 30000);
+    return () => { active = false; unsubscribe(); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", visible); window.clearInterval(timer); };
   }, [meetingId]);
 
   const generationParticipants = useMemo(() => {
@@ -140,35 +166,62 @@ export function TableAssignmentManager({
     return generationParticipants.filter((participant) => participant.status === "参加" || participant.status === "ゲスト").length;
   }, [generationParticipants]);
 
-  function generateTables(event: FormEvent<HTMLFormElement>) {
+  async function generateTables(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!ready) return;
-    if (editor?.tables.some((table) => table.seats.length) && !window.confirm("編集中のテーブル割りを置き換えて、自動生成しますか？")) return;
-    const generated = generateTableAssignment(generationParticipants, members, pastTables, 1200, draftSeatsPerTable);
+    if (!ready || operation.current) return;
+    if (!window.confirm("編集中・復元済みの下書きを置き換えて、自動生成しますか？")) return;
+    operation.current = true;
+    setBusy(true);
+    const run = lifetime.current;
+    participantRequest.current++;
+    setError("");
+    try {
+    const [nextMembers, attendance, drafts, published, meetings] = await Promise.all([fetchManagedMembers(initialData.current.initialMembers), fetchStoredParticipants(meetingId), fetchSavedTableAssignments(), fetchPublishedTableAssignments(), fetchMeetings(initialData.current.initialMeetings)]);
+    if (run !== lifetime.current) return;
+    const history = assignmentHistory(meetingId, meetings, drafts, published, nextMembers);
+    const participants = storedParticipantsValueToParticipants(meetingId, nextMembers, initialParticipants, attendance);
+    if (!participants.some((participant) => participant.status === "参加" || participant.status === "ゲスト")) throw new Error("最新の参加予定者が0名のため生成できません。編集中のテーブル割りは保持しています。");
+    const generated = generateTableAssignment(participants, nextMembers, history.tables, 1200, draftSeatsPerTable);
+    preserveTableDraft(meetingId);
+    setMembers(nextMembers);
+    setStoredParticipants(attendance);
+    setHistoryMessage(history.message);
+    setRecoveryMessage("");
     setSeatsPerTable(draftSeatsPerTable);
     setEditor((previous) => ({ ...generated, revision: (previous?.revision ?? 0) + 1, restoreDraft: false }));
     try { window.localStorage.setItem(`draft-table-assignment-${meetingId}`, JSON.stringify({ tables: compactTableAssignment(generated.tables), updatedAt: new Date().toISOString() })); } catch { /* Save button remains available. */ }
+    } catch (cause) { if (run === lifetime.current) setError(cause instanceof Error ? cause.message : "最新情報を読み込めませんでした。編集中のテーブル割りは保持しています。"); }
+    finally { if (run === lifetime.current) { operation.current = false; setBusy(false); } }
   }
 
   async function saveCurrentTables(tables: AssignmentTable[], updatedAt: string) {
+    if (operation.current) throw new Error("処理中です。完了後にもう一度保存してください。");
+    operation.current = true;
+    setBusy(true);
+    const run = lifetime.current;
+    try {
     const next = { tables, updatedAt, seatsPerTable };
     await saveTableAssignment(meetingId, next, savedVersion);
+    if (run !== lifetime.current) return;
     setSavedVersion(updatedAt);
-    try { writeCurrentAssignment(meetingId, next); } catch { /* Server save succeeded. */ }
     setCurrentAssignment(next);
+    setRecoveryMessage(reconcileTableMembers(tables, members).warning);
+    } finally { if (run === lifetime.current) { operation.current = false; setBusy(false); } }
   }
 
   async function publishCurrentTables() {
-    if (!currentAssignment || publishing) return;
+    if (!currentAssignment || publishing || operation.current) return;
+    if (!savedVersion) { setError("先にテーブル割りを「保存」してから公開してください。"); return; }
+    operation.current = true;
+    setBusy(true);
+    const run = lifetime.current;
     setPublishing(true);
     try {
-      const latest = await fetchSavedTableAssignments();
-      if ((latest[meetingId]?.updatedAt ?? null) !== savedVersion) throw new Error("別の運営担当者が保存内容を更新しました。再読み込みして最新のテーブル割りを確認してから公開してください。");
-      const published = await publishTableAssignment(meetingId, currentAssignment.tables);
-      setPublishedAt(published.publishedAt);
+      const published = await publishTableAssignment(meetingId, savedVersion, publishedAt ?? null);
+      if (run === lifetime.current) setPublishedAt(published.publishedAt);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "テーブル割りをサーバーへ公開できませんでした。");
-    } finally { setPublishing(false); }
+      if (run === lifetime.current) setError(cause instanceof Error ? cause.message : "テーブル割りをサーバーへ公開できませんでした。");
+    } finally { if (run === lifetime.current) { operation.current = false; setBusy(false); setPublishing(false); } }
   }
 
   return (
@@ -176,6 +229,24 @@ export function TableAssignmentManager({
       {error && <p role="alert" className="rounded bg-red-50 p-4 font-bold text-red-700">{error} <button type="button" onClick={() => window.location.reload()} className="underline">再読み込み</button></p>}
       {!ready && !error && <p role="status">保存済みのテーブル割りと参加者を読み込んでいます…</p>}
       {historyMessage && <p role="status" className="rounded bg-amber-50 p-4 text-amber-900">{historyMessage}</p>}
+      {recoveryMessage && <p role="status" className="rounded bg-blue-50 p-4 text-deep">{recoveryMessage}</p>}
+      {recoveryCandidates.length > 0 && <section className="rounded border border-amber-200 bg-amber-50 p-4">
+        <h2 className="font-black text-deep">この端末に残っている保存記録・下書き</h2>
+        <p className="mt-2 text-sm">旧画面の保存は端末内だけの場合がありました。実際に使用した割り当てか内容を確認してください。読み込みだけでは共有・公開しません。</p>
+        {recoveryCandidates.map((candidate) => <details key={candidate.key} className="mt-3 rounded border bg-white p-3">
+          <summary className="cursor-pointer font-bold">{candidate.label} — {formatLocalUpdatedAt(candidate.updatedAt)} / {candidate.tables.reduce((count, table) => count + table.seats.length, 0)}名</summary>
+          <ReadOnlyTables tables={candidate.tables} />
+          <button type="button" disabled={!ready || busy} className="focus-ring mt-3 rounded bg-forest px-4 py-2 font-bold text-white disabled:opacity-50" onClick={() => {
+            if (operation.current) return;
+            if (!window.confirm("この記録を編集欄へ読み込みます。現在編集中の内容がある場合は先に保存してください。読み込みますか？")) return;
+            try { preserveTableDraft(meetingId); } catch (cause) { setError(cause instanceof Error ? cause.message : "下書きを保管できませんでした。"); return; }
+            const reconciled = reconcileTableMembers(candidate.tables, members);
+            setEditor((previous) => ({ tables: reconciled.tables, revision: (previous?.revision ?? 0) + 1, restoreDraft: false }));
+            if (candidate.seatsPerTable) { setSeatsPerTable(candidate.seatsPerTable); setDraftSeatsPerTable(candidate.seatsPerTable); }
+            setRecoveryMessage(`端末内の記録を編集欄に読み込みました。内容を確認後に「保存」で共有保存します。会員向け公開は別の操作です。元の旧保存記録は保持しています。 ${reconciled.warning}`);
+          }}>この内容を編集欄へ読み込む</button>
+        </details>)}
+      </section>}
       <section className="rounded border border-slate-200 bg-white p-4 shadow-soft">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -189,7 +260,7 @@ export function TableAssignmentManager({
             <button
               type="button"
               onClick={publishCurrentTables}
-              disabled={!currentAssignment?.tables.some((table) => table.seats.length) || publishing || !ready}
+              disabled={!currentAssignment?.tables.some((table) => table.seats.length) || busy || !ready}
               className="focus-ring inline-flex items-center gap-2 rounded bg-accent px-4 py-2 text-sm font-bold text-white shadow-soft hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send size={16} />
@@ -210,6 +281,7 @@ export function TableAssignmentManager({
           <span className="text-sm font-bold text-slate-600">1テーブルあたりの人数</span>
           <select
             value={draftSeatsPerTable}
+            disabled={busy}
             onChange={(event) => setDraftSeatsPerTable(Number(event.target.value))}
             className="focus-ring rounded border border-slate-200 px-3 py-2"
           >
@@ -220,16 +292,16 @@ export function TableAssignmentManager({
             <option value="8">8人</option>
           </select>
         </label>
-        <button type="submit" disabled={!ready || attendeesCount === 0} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white hover:bg-deep disabled:opacity-50">
+        <button type="submit" disabled={!ready || busy} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white hover:bg-deep disabled:opacity-50">
           <RefreshCw size={16} />
-          自動テーブル割り作成
+          {busy ? "処理中…" : "自動テーブル割り作成"}
         </button>
         <p className="text-sm text-slate-600">
           現在の設定: {seatsPerTable}人 / テーブル。直近2回の同席、リーダー配置、大業種のバランスを見ながら作成します。
         </p>
       </form>
 
-      {ready && editor && <EditableTableAssignment
+      {ready && editor && <fieldset disabled={busy}><EditableTableAssignment
         key={`${meetingId}-${editor.revision}`}
         initialTables={editor.tables}
         score={editor.score}
@@ -239,7 +311,7 @@ export function TableAssignmentManager({
         storageKey={`draft-table-assignment-${meetingId}`}
         helperText="保存を押すと、運営全員が同じテーブル割りを編集できます。作業途中の変更はこの端末に保持されます。会員向けの表示には、保存後に「公開する」を押してください。"
         onSave={saveCurrentTables}
-      />}
+      /></fieldset>}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { fetchMeetings } from "@/lib/data/meeting-storage";
+import { readTableRecoveryMeetingIds } from "@/lib/data/table-assignment-recovery";
 import type { AssignmentTable, Meeting, Member } from "@/types/domain";
 
 export function PastDataManager({ meetings }: {
@@ -14,8 +15,10 @@ export function PastDataManager({ meetings }: {
   const [managedMeetings, setManagedMeetings] = useState(meetings);
   const [activeMeetingId, setActiveMeetingId] = useState("");
   const [error, setError] = useState("");
+  const [recoveryMeetingIds, setRecoveryMeetingIds] = useState<string[]>([]);
   useEffect(() => {
     let active = true;
+    setRecoveryMeetingIds(readTableRecoveryMeetingIds());
     void fetchMeetings(meetings).then((next) => { if (active) setManagedMeetings(next); })
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "過去の定例会を読み込めませんでした。"); });
     return () => { active = false; };
@@ -29,6 +32,11 @@ export function PastDataManager({ meetings }: {
       <p className="mt-2 text-sm text-slate-600">過去の定例会を選び、保存済みの参加状況とテーブル割りを確認・修正できます。</p>
     </div>
     {error && <p role="alert" className="text-red-700">{error}</p>}
+    {recoveryMeetingIds.length > 0 && <section className="rounded bg-amber-50 p-4">
+      <h3 className="font-bold">この端末に残っているテーブル割りの記録</h3>
+      <p className="mt-2 text-sm">共有保存先にない場合も、以前の端末内保存から内容を確認できます。実際の履歴か確認してから共有保存してください。</p>
+      <ul className="mt-2 grid gap-2">{recoveryMeetingIds.map((id) => <li key={id}><Link className="focus-ring underline" href={`/admin/meetings/${encodeURIComponent(id)}/table-assignments`}>{managedMeetings.find((meeting) => meeting.id === id)?.title ?? `保存記録（${id}）`}を確認する</Link></li>)}</ul>
+    </section>}
     {selected ? <>
       <label className="grid gap-2">
         <span className="font-bold">対象の定例会</span>
