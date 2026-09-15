@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import { Save, Upload } from "lucide-react";
 import { saveMemberOverride, type MemberEditableFields } from "@/lib/data/member-overrides";
@@ -147,7 +148,7 @@ export function MemberEditForm({ member }: { member: Member }) {
             <Save size={18} />
             {isSaving ? "保存中..." : "保存する"}
           </button>
-          <a href="/admin/members" className="focus-ring rounded border border-slate-200 px-5 py-3 text-sm font-bold">一覧へ戻る</a>
+          <Link href="/admin/members" className="focus-ring rounded border border-slate-200 px-5 py-3 text-sm font-bold">一覧へ戻る</Link>
         </div>
       </form>
     </div>
