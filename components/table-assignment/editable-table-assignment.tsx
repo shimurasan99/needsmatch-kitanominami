@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, FileText, Save } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, FileText, RefreshCw, Save, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AssignmentSeat, AssignmentTable } from "@/types/domain";
+import type { AssignmentSeat, AssignmentTable, Member } from "@/types/domain";
 import { csvCell } from "@/lib/data/csv-export";
 import { compactTableAssignment } from "@/lib/table-assignment/snapshot";
+import { addMemberToTable, getUnassignedMembers } from "@/lib/table-assignment/manual-addition";
 
 function seatKey(seat: AssignmentSeat, index: number) {
   return seat.member?.id ?? `${seat.guestName ?? "guest"}-${index}`;
@@ -48,7 +49,11 @@ export function EditableTableAssignment({
   restoreDraft = true,
   savedAt,
   helperText,
-  onSave
+  onSave,
+  members = [],
+  participantStatuses = {},
+  seatsPerTable,
+  onRefreshMembers
 }: {
   initialTables: AssignmentTable[];
   score?: number;
@@ -58,6 +63,10 @@ export function EditableTableAssignment({
   savedAt?: string;
   helperText?: string;
   onSave?: (tables: AssignmentTable[], updatedAt: string) => void | Promise<void>;
+  members?: Member[];
+  participantStatuses?: Record<string, string>;
+  seatsPerTable?: number;
+  onRefreshMembers?: () => Promise<void>;
 }) {
   const [tables, setTables] = useState<AssignmentTable[]>(() => {
     if (restoreDraft && typeof window !== "undefined") {
@@ -72,8 +81,62 @@ export function EditableTableAssignment({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const edited = useRef(false);
+  const savingRef = useRef(false);
+  const addingRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const [additionalMemberId, setAdditionalMemberId] = useState("");
+  const [additionalTableName, setAdditionalTableName] = useState("");
+  const [additionMessage, setAdditionMessage] = useState("");
+  const [recentAddition, setRecentAddition] = useState<{ id: string; name: string } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const tableNames = useMemo(() => tables.map((table) => table.tableName), [tables]);
+  const unassignedMembers = useMemo(() => getUnassignedMembers(tables, members), [tables, members]);
+  const selectedMember = unassignedMembers.find((member) => member.id === additionalMemberId);
+  const selectedTable = tables.find((table) => table.tableName === additionalTableName);
+  const exceedsCapacity = !!selectedMember && !!selectedTable && !!seatsPerTable && selectedTable.seats.length >= seatsPerTable;
+
+  useEffect(() => { addingRef.current = false; }, [tables]);
+
+  function addSelectedMember() {
+    if (savingRef.current || refreshingRef.current || addingRef.current || !selectedMember || !selectedTable) return;
+    addingRef.current = true;
+    try {
+      const next = addMemberToTable(tables, selectedMember, selectedTable.tableName);
+      edited.current = true;
+      setTables(next);
+      setSaved(false);
+      setError("");
+      setAdditionMessage(`${selectedMember.name}さんを${selectedTable.tableName}の末尾に追加しました。「保存」を押すと運営全員に共有されます。会員向けには保存後に公開してください。`);
+      setAdditionalMemberId("");
+      setRecentAddition({ id: selectedMember.id, name: selectedMember.name });
+    } catch (cause) {
+      addingRef.current = false;
+      setError(cause instanceof Error ? cause.message : "会員を追加できませんでした。");
+    }
+  }
+
+  function undoRecentAddition() {
+    if (!recentAddition || savingRef.current || refreshingRef.current || addingRef.current) return;
+    edited.current = true;
+    setSaved(false);
+    setTables((current) => current.map((table) => ({ ...table, seats: table.seats.filter((seat) => seat.member?.id !== recentAddition.id) })));
+    setAdditionMessage(`${recentAddition.name}さんの直前の追加を取り消しました。他の配置と出欠回答は変更していません。`);
+    setRecentAddition(null);
+  }
+
+  async function refreshMembers() {
+    if (!onRefreshMembers || savingRef.current || refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    setError("");
+    try {
+      await onRefreshMembers();
+      setAdditionMessage("会員名簿・出欠を最新の状態に更新しました。編集中のテーブル割りは変更していません。");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "会員名簿を更新できませんでした。編集中の配置は保持しています。");
+    } finally { refreshingRef.current = false; setRefreshing(false); }
+  }
 
   useEffect(() => {
     if (!edited.current) return;
@@ -112,7 +175,8 @@ export function EditableTableAssignment({
   }
 
   async function saveTables() {
-    if (saving) return;
+    if (savingRef.current || refreshingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     const updatedAt = new Date().toISOString();
@@ -120,9 +184,11 @@ export function EditableTableAssignment({
       await onSave?.(tables, updatedAt);
       try { window.localStorage.setItem(storageKey, JSON.stringify({ tables: compactTableAssignment(tables), updatedAt })); } catch { /* Server save succeeded. */ }
       setSaved(true);
+      setRecentAddition(null);
+      setAdditionMessage("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "保存できませんでした。もう一度お試しください。");
-    } finally { setSaving(false); }
+    } finally { savingRef.current = false; setSaving(false); }
   }
 
   function exportCsv() {
@@ -338,6 +404,39 @@ export function EditableTableAssignment({
 
   return (
     <div className="grid gap-5">
+      {onRefreshMembers && <section aria-label="会員を手動で追加" className="min-w-0 rounded border border-blue-200 bg-blue-50 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-black text-deep">急遽参加する会員を手動で追加</h2>
+          <button type="button" onClick={refreshMembers} disabled={saving || refreshing} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+            <RefreshCw size={16} />{refreshing ? "名簿を更新中…" : "会員名簿・出欠を更新"}
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-slate-700">既存の配置は変えず、選んだテーブルの末尾に1名追加します。追加済みの会員は候補から除外されます。</p>
+        <p className="mt-1 text-sm text-slate-700">この操作では出欠回答は変更しません。未定・欠席の場合は「参加者管理」で参加に変更してください。手動追加後の同席重複は自動調整しません。</p>
+        {!tables.length ? <p className="mt-3 font-bold text-slate-600">追加先のテーブルがありません。先にテーブル割りを作成してください。</p> : <fieldset disabled={saving || refreshing} className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
+          <label className="grid min-w-0 gap-2">
+            <span className="text-sm font-bold text-deep">追加する会員</span>
+            <select value={selectedMember?.id ?? ""} onChange={(event) => setAdditionalMemberId(event.target.value)} className="focus-ring w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-3 text-sm">
+              <option value="">会員を選択してください</option>
+              {unassignedMembers.map((member) => <option key={member.id} value={member.id}>{member.name}（No.{member.memberNo} / {participantStatuses[member.id] === "キャンセル" ? "欠席" : participantStatuses[member.id] ?? "未回答"}）</option>)}
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-2">
+            <span className="text-sm font-bold text-deep">追加先のテーブル</span>
+            <select value={selectedTable?.tableName ?? ""} onChange={(event) => setAdditionalTableName(event.target.value)} className="focus-ring w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-3 text-sm">
+              <option value="">テーブルを選択してください</option>
+              {tables.map((table) => <option key={table.tableName} value={table.tableName}>{table.tableName}（現在{table.seats.length}名）</option>)}
+            </select>
+          </label>
+          {unassignedMembers.length === 0 && <p className="text-sm font-bold text-slate-600 sm:col-span-2">追加できる未配置の在籍会員はいません。新規登録後は「会員名簿・出欠を更新」を押してください。</p>}
+          {exceedsCapacity && <p role="status" className="rounded bg-amber-100 p-3 text-sm font-bold text-amber-900 sm:col-span-2">追加すると{selectedTable!.seats.length + 1}名になり、設定の{seatsPerTable}名を超えます。会場の席数を確認して追加してください。</p>}
+          <button type="button" onClick={addSelectedMember} disabled={!selectedMember || !selectedTable} className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-forest px-4 py-3 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2">
+            <UserPlus size={17} />選んだ会員をテーブルに追加
+          </button>
+        </fieldset>}
+        {additionMessage && <p role="status" className="mt-3 text-sm font-bold text-deep">{additionMessage}</p>}
+        {recentAddition && <button type="button" onClick={undoRecentAddition} disabled={saving || refreshing} className="focus-ring mt-3 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-50">直前の追加を取り消す</button>}
+      </section>}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-200 bg-white p-4">
         <div>
           <p className="text-sm font-bold text-slate-500">最適化スコア</p>
@@ -347,7 +446,7 @@ export function EditableTableAssignment({
           {error && <p role="alert" className="mt-2 text-sm font-bold text-red-700">{error}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={saveTables} disabled={saving || !tables.some((table) => table.seats.length)} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+          <button type="button" onClick={saveTables} disabled={saving || refreshing || !tables.some((table) => table.seats.length)} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
             <Save size={16} />
             {saving ? "保存中…" : "保存"}
           </button>

@@ -12,7 +12,7 @@ function load(relative, mocks = {}) {
   const filename = path.join(__dirname, '..', relative);
   const loaded = new Module(filename, module);
   loaded.paths = module.paths;
-  loaded.require = (id) => Object.hasOwn(mocks, id) ? mocks[id] : id === '@/lib/table-assignment/snapshot' ? load('lib/table-assignment/snapshot.ts') : id === '@/lib/table-assignment/member-identity' ? load('lib/table-assignment/member-identity.ts') : id === '@/lib/data/table-assignment-recovery' ? load('lib/data/table-assignment-recovery.ts') : require(id);
+  loaded.require = (id) => Object.hasOwn(mocks, id) ? mocks[id] : id === '@/lib/table-assignment/manual-addition' ? load('lib/table-assignment/manual-addition.ts') : id === '@/lib/table-assignment/snapshot' ? load('lib/table-assignment/snapshot.ts') : id === '@/lib/table-assignment/member-identity' ? load('lib/table-assignment/member-identity.ts') : id === '@/lib/data/table-assignment-recovery' ? load('lib/data/table-assignment-recovery.ts') : require(id);
   loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX }
   }).outputText, filename);
@@ -123,7 +123,7 @@ test('manager generates only on request and uses actual previous two meetings, n
   assert.equal(generated, 1, 'participant refresh must not regenerate or reset the editor');
   await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
   assert.equal(generated, 2, 'same-size generation button must still work');
-  await act(async () => renderer.root.findAllByType('select')[1].props.onChange({ target: { value: 'Bテーブル' } }));
+  await act(async () => renderer.root.findAllByType('select').find((select) => select.props.value === 'Aテーブル').props.onChange({ target: { value: 'Bテーブル' } }));
   await act(async () => renderer.update(React.createElement(Manager, { meetingId: 'current', initialMembers: [], initialParticipants: [], initialMeetings: structuredClone(meetings), initialSeatsPerTable: 5 })));
   assert.equal(generated, 2);
   await act(async () => saveButton(renderer).props.onClick());

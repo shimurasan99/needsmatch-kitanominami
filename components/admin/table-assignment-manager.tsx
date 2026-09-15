@@ -166,6 +166,23 @@ export function TableAssignmentManager({
     return generationParticipants.filter((participant) => participant.status === "参加" || participant.status === "ゲスト").length;
   }, [generationParticipants]);
 
+  async function refreshAdditionMembers() {
+    if (operation.current) throw new Error("処理中です。完了後に名簿を更新してください。");
+    operation.current = true;
+    setBusy(true);
+    const run = lifetime.current;
+    participantRequest.current++;
+    try {
+      const [nextMembers, attendance] = await Promise.all([
+        fetchManagedMembers(initialData.current.initialMembers), fetchStoredParticipants(meetingId)
+      ]);
+      if (run !== lifetime.current) return;
+      setMembers(nextMembers);
+      setStoredParticipants(attendance);
+      setParticipantVersion((current) => current + 1);
+    } finally { if (run === lifetime.current) { operation.current = false; setBusy(false); } }
+  }
+
   async function generateTables(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!ready || operation.current) return;
@@ -311,6 +328,10 @@ export function TableAssignmentManager({
         storageKey={`draft-table-assignment-${meetingId}`}
         helperText="保存を押すと、運営全員が同じテーブル割りを編集できます。作業途中の変更はこの端末に保持されます。会員向けの表示には、保存後に「公開する」を押してください。"
         onSave={saveCurrentTables}
+        members={members}
+        participantStatuses={storedParticipants?.statuses ?? {}}
+        seatsPerTable={seatsPerTable}
+        onRefreshMembers={refreshAdditionMembers}
       /></fieldset>}
     </div>
   );
