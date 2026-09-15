@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ArrowRight, Banknote, CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { fetchDealResults, readDealResults, subscribeDealResults } from "@/lib/data/deal-results-storage";
+import { fetchDealResults, subscribeDealResults } from "@/lib/data/deal-results-storage";
 import type { DealIndustry, DealResult } from "@/types/domain";
 
 const dealIndustries: DealIndustry[] = ["美容", "商材", "イベント", "IT", "販売", "飲食", "保険", "不動産", "営業", "研修"];
@@ -20,13 +20,22 @@ function formatSales(value: number) {
 }
 
 export function DealResultsDirectory({ initialDeals }: { initialDeals: DealResult[] }) {
-  const [deals, setDeals] = useState(initialDeals);
+  const [deals, setDeals] = useState<DealResult[]>([]);
+  const [message, setMessage] = useState("商談実績を読み込んでいます...");
   const [industry, setIndustry] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("newest");
 
   useEffect(() => {
-    void fetchDealResults(initialDeals).then(setDeals).catch(() => setDeals(readDealResults(initialDeals)));
-    return subscribeDealResults(() => setDeals(readDealResults(initialDeals)));
+    let active = true;
+    let revision = 0;
+    const refresh = () => {
+      const request = ++revision;
+      void fetchDealResults(initialDeals).then((next) => { if (active && request === revision) { setDeals(next); setMessage(""); } }).catch(() => { if (active && request === revision) setMessage("最新の商談実績を読み込めませんでした。再読み込みしてください。"); });
+    };
+    refresh();
+    const unsubscribe = subscribeDealResults(refresh);
+    window.addEventListener("focus", refresh);
+    return () => { active = false; unsubscribe(); window.removeEventListener("focus", refresh); };
   }, [initialDeals]);
 
   const visibleDeals = useMemo(() => {
@@ -41,6 +50,7 @@ export function DealResultsDirectory({ initialDeals }: { initialDeals: DealResul
 
   return (
     <div className="space-y-6">
+      {message && <p className="text-sm text-slate-600">{message}</p>}
       <div className="flex flex-wrap items-end gap-3 rounded border border-slate-200 bg-white p-4 shadow-soft">
         <label className="grid gap-2">
           <span className="text-sm font-bold text-slate-600">業種</span>
@@ -65,7 +75,7 @@ export function DealResultsDirectory({ initialDeals }: { initialDeals: DealResul
         {visibleDeals.map((deal) => (
           <article key={deal.id} className="overflow-hidden rounded border border-slate-200 bg-white shadow-soft">
             <div className="relative bg-snow">
-              <Image src={deal.imageUrl} alt={`${deal.fromMemberName}から${deal.toMemberName}への商談成立実績`} width={900} height={560} className="aspect-[16/10] w-full object-cover" unoptimized={deal.imageUrl.startsWith("data:")} />
+              <Image src={deal.imageUrl || "/images/kitanominami-page-main.jpg"} alt={`${deal.fromMemberName}から${deal.toMemberName}への商談成立実績`} width={900} height={560} className="aspect-[16/10] w-full object-cover" unoptimized />
               <div className="absolute left-4 top-4 rounded bg-accent px-3 py-1 text-xs font-black text-white">{deal.industry}</div>
             </div>
             <div className="p-5">
@@ -84,7 +94,7 @@ export function DealResultsDirectory({ initialDeals }: { initialDeals: DealResul
         ))}
       </div>
 
-      {visibleDeals.length === 0 && (
+      {!message && visibleDeals.length === 0 && (
         <p className="rounded border border-slate-200 bg-white p-5 text-sm font-bold text-slate-500 shadow-soft">該当する商談成立実績はありません。</p>
       )}
     </div>

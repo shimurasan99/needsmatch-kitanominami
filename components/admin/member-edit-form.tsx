@@ -1,17 +1,17 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Save, Upload } from "lucide-react";
-import { fetchManagedMembers, readMemberOverrides, saveMemberOverride } from "@/lib/data/member-overrides";
-import { members as initialMembers } from "@/lib/data/mock";
+import { saveMemberOverride, type MemberEditableFields } from "@/lib/data/member-overrides";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
 const roles: RoleName[] = ["主催", "事務局長", "幹事", "役員", "支部サポーター", "準役員", "一般会員"];
 const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
 
 export function MemberEditForm({ member }: { member: Member }) {
-  const merged = useMemo(() => ({ ...member, ...(readMemberOverrides()[member.id] ?? {}) }), [member]);
+  const merged = member;
+  const baseline = useRef<MemberEditableFields>(member);
   const [profileImageUrl, setProfileImageUrl] = useState(merged.profileImageUrl);
   const [position, setPosition] = useState<RoleName>(merged.position);
   const [isTableLeader, setIsTableLeader] = useState(merged.isTableLeader);
@@ -25,26 +25,15 @@ export function MemberEditForm({ member }: { member: Member }) {
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    void fetchManagedMembers(initialMembers).then((allMembers) => {
-      const next = allMembers.find((item) => item.id === member.id) ?? member;
-      setProfileImageUrl(next.profileImageUrl);
-      setPosition(next.position);
-      setIsTableLeader(next.isTableLeader);
-      setIndustry(next.industry);
-      setMajorIndustry(next.majorIndustry);
-      setFacebookUrl(next.facebookUrl);
-      setInstagramUrl(next.instagramUrl);
-      setWebsiteUrl(next.websiteUrl);
-      setImageError("");
-    }).catch(() => setImageError("共有データを読み込めませんでした。"));
-  }, [member]);
-
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving || isProcessingImage) return;
     setIsSaving(true);
     try {
-      await saveMemberOverride(member.id, { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl });
+      const values = { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl };
+      const changes = Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== baseline.current[key as keyof MemberEditableFields])) as Partial<MemberEditableFields>;
+      await saveMemberOverride(member.id, changes);
+      baseline.current = values;
       setSaved(true);
       setImageError("");
     } catch (error) {
@@ -85,7 +74,7 @@ export function MemberEditForm({ member }: { member: Member }) {
           width={260}
           height={260}
           className="aspect-square w-full rounded object-cover"
-          unoptimized={profileImageUrl.startsWith("data:")}
+          unoptimized
         />
         <label className="focus-ring mt-3 flex cursor-pointer items-center justify-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-deep hover:bg-snow">
           <Upload size={16} />
@@ -93,7 +82,7 @@ export function MemberEditForm({ member }: { member: Member }) {
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
-            disabled={isProcessingImage}
+            disabled={isProcessingImage || isSaving}
             onChange={(event) => uploadProfileImage(event.target.files?.[0])}
             className="sr-only"
           />
@@ -104,10 +93,10 @@ export function MemberEditForm({ member }: { member: Member }) {
         <p className="mt-1 text-sm text-slate-600">{member.email}</p>
       </aside>
 
-      <form onSubmit={save} className="rounded border border-slate-200 bg-white p-5 shadow-soft">
+      <form onSubmit={save} onChange={() => setSaved(false)} className="rounded border border-slate-200 bg-white p-5 shadow-soft">
         {saved && <p className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm font-bold text-forest">保存しました。会員紹介ページへ反映されます。</p>}
         {imageError && <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{imageError}</p>}
-        <div className="grid gap-4 md:grid-cols-2">
+        <fieldset disabled={isSaving} className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2">
             <span className="text-sm font-bold text-slate-600">写真URL</span>
             <input
@@ -152,9 +141,9 @@ export function MemberEditForm({ member }: { member: Member }) {
             <input type="checkbox" checked={isTableLeader} onChange={(e) => setIsTableLeader(e.target.checked)} className="h-5 w-5" />
             <span className="font-bold text-deep">テーブルリーダー権限あり</span>
           </label>
-        </div>
+        </fieldset>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button type="submit" disabled={isSaving} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
+          <button type="submit" disabled={isSaving || isProcessingImage} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
             <Save size={18} />
             {isSaving ? "保存中..." : "保存する"}
           </button>

@@ -1,7 +1,8 @@
 "use client";
 
 import type { DealResult } from "@/types/domain";
-import { fetchSharedState, saveSharedState } from "@/lib/data/shared-state";
+import { fetchSharedState, updateSharedState } from "@/lib/data/shared-state";
+import { mergeEditedRecords } from "@/lib/data/merge-edited-records";
 
 export const DEAL_RESULTS_STORAGE_KEY = "nm_deal_results_v2";
 const DEAL_RESULTS_UPDATED_EVENT = "nm-deal-results-updated";
@@ -21,20 +22,21 @@ export function readDealResults(fallback: DealResult[]) {
 }
 
 export function writeDealResults(deals: DealResult[]) {
-  window.localStorage.setItem(DEAL_RESULTS_STORAGE_KEY, JSON.stringify(deals));
+  try { window.localStorage.setItem(DEAL_RESULTS_STORAGE_KEY, JSON.stringify(deals)); } catch { /* Optional browser cache. */ }
   window.dispatchEvent(new Event(DEAL_RESULTS_UPDATED_EVENT));
 }
 
 export async function fetchDealResults(fallback: DealResult[]) {
   const shared = await fetchSharedState<DealResult[]>("deals");
-  const next = shared ?? readDealResults(fallback);
-  window.localStorage.setItem(DEAL_RESULTS_STORAGE_KEY, JSON.stringify(next));
+  const next = shared ?? fallback;
+  try { window.localStorage.setItem(DEAL_RESULTS_STORAGE_KEY, JSON.stringify(next)); } catch { /* Optional browser cache. */ }
   return next;
 }
 
-export async function saveDealResults(deals: DealResult[]) {
-  await saveSharedState("deals", deals);
-  writeDealResults(deals);
+export async function saveDealResults(deals: DealResult[], baseline: DealResult[]) {
+  const next = await updateSharedState<DealResult[]>("deals", (current) => mergeEditedRecords(current ?? baseline, baseline, deals));
+  writeDealResults(next);
+  return next;
 }
 
 export function subscribeDealResults(listener: () => void) {

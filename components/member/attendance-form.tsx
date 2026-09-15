@@ -16,23 +16,28 @@ export function AttendanceForm({ meeting, members }: { meeting: Meeting; members
   const [knownStatuses, setKnownStatuses] = useState<Record<string, AttendanceStatus>>({});
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    let active = true;
     void fetchStoredParticipants(meeting.id).then((saved) => {
+      if (!active) return;
       setKnownStatuses((saved?.statuses ?? {}) as Record<string, AttendanceStatus>);
-    });
+      setLoaded(true);
+    }).catch((error) => { if (active) setMessage(error.message); });
+    return () => { active = false; };
   }, [meeting.id]);
 
   function selectMember(value: string) {
     setMemberId(value);
     const savedStatus = knownStatuses[value];
-    if (savedStatus && statuses.includes(savedStatus)) setStatus(savedStatus);
+    setStatus(savedStatus && statuses.includes(savedStatus) ? savedStatus : "参加");
     setMessage("");
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!memberId) return;
+    if (!memberId || isSaving || !loaded) return;
     setIsSaving(true);
     setMessage("");
     try {
@@ -50,13 +55,13 @@ export function AttendanceForm({ meeting, members }: { meeting: Meeting; members
     <form onSubmit={submit} className="mt-8 grid gap-6 rounded border border-slate-200 bg-white p-5 shadow-soft sm:p-8">
       <label className="grid gap-2">
         <span className="font-bold text-deep">お名前</span>
-        <select value={memberId} onChange={(event) => selectMember(event.target.value)} required className="focus-ring rounded border border-slate-300 bg-white px-4 py-3">
+        <select disabled={!loaded || isSaving} value={memberId} onChange={(event) => selectMember(event.target.value)} required className="focus-ring rounded border border-slate-300 bg-white px-4 py-3">
           <option value="">自分の名前を選択してください</option>
           {sortedMembers.map((member) => <option key={member.id} value={member.id}>{member.name}（会員No.{member.memberNo}）</option>)}
         </select>
       </label>
 
-      <fieldset>
+      <fieldset disabled={!loaded || isSaving}>
         <legend className="font-bold text-deep">出欠</legend>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           {statuses.map((option) => (
@@ -68,7 +73,7 @@ export function AttendanceForm({ meeting, members }: { meeting: Meeting; members
         </div>
       </fieldset>
 
-      <button type="submit" disabled={!memberId || isSaving} className="focus-ring rounded bg-accent px-5 py-3 font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
+      <button type="submit" disabled={!loaded || !memberId || isSaving} className="focus-ring rounded bg-accent px-5 py-3 font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
         {isSaving ? "保存中…" : "この内容で保存"}
       </button>
       {message && <p role="status" className="flex items-center gap-2 rounded bg-blue-50 p-3 text-sm font-bold text-forest"><CheckCircle2 size={18} />{message}</p>}

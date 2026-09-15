@@ -3,38 +3,65 @@
 import { CalendarDays, Crown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { formatLocalUpdatedAt } from "@/lib/data/participant-storage";
-import { fetchPublishedTableAssignments, readPublishedTableAssignments, subscribePublishedTableAssignments, type PublishedTableAssignment } from "@/lib/data/table-assignment-publication";
+import { fetchPublishedTableAssignments, subscribePublishedTableAssignments, type PublishedTableAssignment } from "@/lib/data/table-assignment-publication";
+import { fetchMeetings } from "@/lib/data/meeting-storage";
 import type { AssignmentTable, Meeting } from "@/types/domain";
 
 function meetingMonthLabel(meeting: Meeting) {
-  return `${new Date(meeting.date).getMonth() + 1}月`;
+  const [year, month] = meeting.date.split("-");
+  return `${year}年${Number(month)}月`;
 }
 
 export function PublishedTableAssignmentSelector({ meetings }: { meetings: Meeting[] }) {
-  const upcomingMeetings = useMemo(() => meetings.filter((meeting) => meeting.status !== "終了").sort((a, b) => a.date.localeCompare(b.date)), [meetings]);
-  const [selectedMeetingId, setSelectedMeetingId] = useState(upcomingMeetings[0]?.id ?? "");
+  const [managedMeetings, setManagedMeetings] = useState(meetings);
+  const [selectedMeetingId, setSelectedMeetingId] = useState("");
   const [publishedAssignments, setPublishedAssignments] = useState<Record<string, PublishedTableAssignment>>({});
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
+  const visibleMeetings = useMemo(() => {
+    const upcoming = (meeting: Meeting) => meeting.status !== "終了" && meeting.date >= today;
+    return managedMeetings.filter((meeting) => meeting.status !== "下書き" && (upcoming(meeting) || Boolean(publishedAssignments[meeting.id])))
+      .sort((a, b) => {
+        if (upcoming(a) !== upcoming(b)) return upcoming(a) ? -1 : 1;
+        return upcoming(a) ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date);
+      });
+  }, [managedMeetings, publishedAssignments, today]);
 
   useEffect(() => {
-    void fetchPublishedTableAssignments().then(setPublishedAssignments).catch(() => setPublishedAssignments(readPublishedTableAssignments()));
-    return subscribePublishedTableAssignments(() => setPublishedAssignments(readPublishedTableAssignments()));
-  }, []);
+    let active = true;
+    const refresh = () => {
+      void Promise.all([fetchPublishedTableAssignments(), fetchMeetings(meetings)]).then(([assignments, nextMeetings]) => {
+        if (!active) return;
+        setPublishedAssignments(assignments);
+        setManagedMeetings(nextMeetings);
+        setLoaded(true);
+        setError("");
+      }).catch(() => { if (active) setError("最新のテーブル割りを取得できませんでした。通信状態を確認してください。"); });
+    };
+    refresh();
+    const unsubscribe = subscribePublishedTableAssignments(refresh);
+    window.addEventListener("focus", refresh);
+    const interval = window.setInterval(refresh, 30000);
+    return () => { active = false; unsubscribe(); window.removeEventListener("focus", refresh); window.clearInterval(interval); };
+  }, [meetings]);
 
-  const selectedMeeting = upcomingMeetings.find((meeting) => meeting.id === selectedMeetingId) ?? upcomingMeetings[0];
+  const selectedMeeting = visibleMeetings.find((meeting) => meeting.id === selectedMeetingId) ?? visibleMeetings[0];
   const selectedAssignment = selectedMeeting ? publishedAssignments[selectedMeeting.id] : null;
 
-  if (upcomingMeetings.length === 0) {
+  if (!loaded || visibleMeetings.length === 0) {
     return (
       <div className="rounded border border-slate-200 bg-white p-5 text-sm font-bold text-slate-500 shadow-soft">
-        現在予定されている定例会はありません。
+        {error ? <p role="alert" className="text-red-700">{error}</p> : !loaded ? <p role="status">テーブル割りを読み込んでいます…</p> : "現在予定されている定例会と、公開済みの過去のテーブル割りはありません。"}
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert" className="rounded bg-red-50 p-4 text-red-700">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {upcomingMeetings.map((meeting) => {
+        {visibleMeetings.map((meeting) => {
           const isSelected = meeting.id === selectedMeeting?.id;
           const isPublished = Boolean(publishedAssignments[meeting.id]);
           return (

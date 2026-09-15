@@ -21,16 +21,12 @@ function mergeMeetings(initial: Meeting[], stored: Meeting[]) {
 }
 
 export async function fetchMeetings(initial: Meeting[]) {
-  try {
     const response = await fetch("/api/meetings", { cache: "no-store" });
-    if (!response.ok) return mergeMeetings(initial, readLocalMeetings());
+    if (!response.ok) throw new Error("月例会を読み込めませんでした。通信状態を確認して再読み込みしてください。");
     const remote = await response.json() as Meeting[];
-    const merged = mergeMeetings(initial, remote);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    const merged = remote;
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch { /* Shared data remains authoritative. */ }
     return merged;
-  } catch {
-    return mergeMeetings(initial, readLocalMeetings());
-  }
 }
 
 export async function saveMeetingRecord(meeting: Meeting, isNew = false) {
@@ -44,12 +40,12 @@ export async function saveMeetingRecord(meeting: Meeting, isNew = false) {
       body: JSON.stringify(saved)
     });
     if (response.ok) saved = await response.json() as Meeting;
-    else throw new Error("月例会をサーバーへ保存できませんでした。環境設定と通信状態を確認してください。");
+    else { const body = await response.json().catch(() => ({})); throw new Error(body.error || "月例会をサーバーへ保存できませんでした。"); }
   } catch (error) {
     throw error instanceof Error ? error : new Error("月例会をサーバーへ保存できませんでした。");
   }
 
   const merged = mergeMeetings(readLocalMeetings(), [saved]);
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch { /* Cache failure must not hide a successful save. */ }
   return saved;
 }

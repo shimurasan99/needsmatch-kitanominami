@@ -1,6 +1,7 @@
 import { LockKeyhole } from "lucide-react";
 
-export default function MemberLoginPage({ searchParams }: { searchParams: { redirect?: string; error?: string } }) {
+export default async function MemberLoginPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ redirect?: string; error?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const redirectTo = searchParams.redirect?.startsWith("/") ? searchParams.redirect : "/member";
   const isAdminLogin = redirectTo.startsWith("/admin");
 

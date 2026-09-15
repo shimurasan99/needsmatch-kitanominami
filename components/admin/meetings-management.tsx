@@ -24,19 +24,27 @@ export function MeetingsManagement({
   const [tab, setTab] = useState<"list" | "past">("list");
   const [managedMeetings, setManagedMeetings] = useState(meetings);
   const [isCreating, setIsCreating] = useState(false);
-  const currentMeetings = managedMeetings.filter((meeting) => meeting.status !== "終了");
-  const pastMeetings = managedMeetings.filter((meeting) => meeting.status === "終了");
+  const [loadError, setLoadError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+  const currentMeetings = managedMeetings.filter((meeting) => meeting.status !== "終了" && meeting.date >= today);
+  const pastMeetings = managedMeetings.filter((meeting) => meeting.status === "終了" || meeting.date < today);
 
   useEffect(() => {
-    void fetchMeetings(meetings).then(setManagedMeetings);
+    let active = true;
+    void fetchMeetings(meetings).then(value => { if (active) { setManagedMeetings(value); setLoaded(true); } }).catch((error) => { if (active) setLoadError(error.message); });
+    return () => { active = false; };
   }, [meetings]);
 
   function replaceMeeting(saved: Meeting) {
     setManagedMeetings((current) => [...current.filter((meeting) => meeting.id !== saved.id), saved].sort((a, b) => a.date.localeCompare(b.date)));
   }
 
+  if (!loaded) return <p role={loadError ? "alert" : "status"} className="rounded bg-snow p-5">{loadError || "月例会を読み込み中…"}</p>;
+
   return (
     <div>
+      {loadError && <p role="alert" className="mb-4 rounded bg-red-50 p-3 text-accent">{loadError}</p>}
       <div className="mb-5 flex flex-wrap gap-2">
         <button type="button" onClick={() => setTab("list")} className={`focus-ring rounded px-4 py-2 text-sm font-bold ${tab === "list" ? "bg-forest text-white" : "border border-slate-200 bg-white"}`}>月例会一覧</button>
         <button type="button" onClick={() => setTab("past")} className={`focus-ring rounded px-4 py-2 text-sm font-bold ${tab === "past" ? "bg-forest text-white" : "border border-slate-200 bg-white"}`}>過去データ管理</button>
@@ -94,12 +102,14 @@ function NewMeetingForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   const [isSaving, setIsSaving] = useState(false);
 
   function update<K extends keyof Meeting>(field: K, value: Meeting[K]) {
+    if (isSaving) return;
     setMeeting((current) => ({ ...current, [field]: value }));
   }
 
   function updateDate(date: string) {
-    const deadline = new Date(`${date}T00:00:00`);
-    deadline.setDate(deadline.getDate() - 3);
+    if (isSaving) return;
+    const deadline = new Date(`${date}T00:00:00Z`);
+    deadline.setUTCDate(deadline.getUTCDate() - 3);
     const [year, month] = date.split("-");
     setMeeting((current) => ({
       ...current,
@@ -111,6 +121,7 @@ function NewMeetingForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
     setIsSaving(true);
     setMessage("");
     try {
@@ -124,10 +135,11 @@ function NewMeetingForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   }
 
   return (
-    <form onSubmit={submit} className="mb-5 grid gap-4 rounded border border-blue-200 bg-blue-50 p-5 md:grid-cols-2">
+    <form onSubmit={submit} className="mb-5 rounded border border-blue-200 bg-blue-50 p-5">
+      <fieldset disabled={isSaving} className="grid gap-4 md:grid-cols-2">
       <div className="flex items-center justify-between md:col-span-2">
         <h2 className="text-xl font-black text-deep">月例会の新規作成</h2>
-        <button type="button" onClick={onCancel} aria-label="閉じる" className="focus-ring rounded p-2 text-slate-500 hover:bg-white"><X size={20} /></button>
+        <button type="button" disabled={isSaving} onClick={() => { if (!isSaving) onCancel(); }} aria-label="閉じる" className="focus-ring rounded p-2 text-slate-500 hover:bg-white"><X size={20} /></button>
       </div>
       {message && <p className="rounded bg-red-50 p-3 text-sm font-bold text-accent md:col-span-2">{message}</p>}
       <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">開催日</span><input required type="date" value={meeting.date} onChange={(event) => updateDate(event.target.value)} className="focus-ring rounded border border-slate-200 px-3 py-3" /></label>
@@ -138,6 +150,7 @@ function NewMeetingForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
       <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">会場住所</span><input value={meeting.venueAddress} onChange={(event) => update("venueAddress", event.target.value)} className="focus-ring rounded border border-slate-200 px-3 py-3" /></label>
       <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">状態</span><select value={meeting.status} onChange={(event) => update("status", event.target.value as Meeting["status"])} className="focus-ring rounded border border-slate-200 px-3 py-3"><option>下書き</option><option>確定</option><option>終了</option></select></label>
       <div className="flex items-end justify-end"><button type="submit" disabled={isSaving} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><Save size={16} />{isSaving ? "保存中…" : "作成して保存"}</button></div>
+      </fieldset>
     </form>
   );
 }

@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAdminRequest, isSignedInRequest } from "@/lib/auth";
 
-const MEMBER_AUTH_COOKIE = "nm_member_auth";
-const ADMIN_AUTH_COOKIE = "nm_admin_auth";
-
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isProtected = pathname.startsWith("/member") || pathname.startsWith("/admin");
   const isLoginPage = pathname === "/member/login";
 
   if (!isProtected || isLoginPage) return NextResponse.next();
 
-  const hasMemberAuth = request.cookies.get(MEMBER_AUTH_COOKIE)?.value === "ok";
-  const hasAdminAuth = request.cookies.get(ADMIN_AUTH_COOKIE)?.value === "ok";
-
-  if (pathname.startsWith("/admin") && hasAdminAuth) {
+  if (pathname.startsWith("/admin") && await isAdminRequest(request)) {
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/member") && (hasMemberAuth || hasAdminAuth)) {
+  if (pathname.startsWith("/member") && await isSignedInRequest(request)) {
     return NextResponse.next();
   }
 

@@ -3,7 +3,7 @@
 import { CalendarCog, Save } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { saveMeetingRecord } from "@/lib/data/meeting-storage";
-import { countMeetingAttendees, subscribeStoredParticipants } from "@/lib/data/participant-storage";
+import { fetchStoredParticipants, storedParticipantsValueToParticipants, subscribeStoredParticipants } from "@/lib/data/participant-storage";
 import type { Meeting, Member, Participant } from "@/types/domain";
 
 type StoredMeetingSettings = {
@@ -12,11 +12,10 @@ type StoredMeetingSettings = {
   endTime: string;
   venueName: string;
   venueAddress: string;
+  title: string;
+  applicationDeadline: string;
+  status: Meeting["status"];
 };
-
-function storageKey(meetingId: string) {
-  return `nm_meeting_settings_${meetingId}`;
-}
 
 export function MeetingSettingsPanel({
   meeting,
@@ -31,51 +30,50 @@ export function MeetingSettingsPanel({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [attendeeCount, setAttendeeCount] = useState(() => participants.filter((participant) => participant.status === "参加" || participant.status === "ゲスト").length);
   const [settings, setSettings] = useState<StoredMeetingSettings>({
     date: meeting.date,
     startTime: meeting.startTime,
     endTime: meeting.endTime,
     venueName: meeting.venueName,
-    venueAddress: meeting.venueAddress
+    venueAddress: meeting.venueAddress,
+    title: meeting.title,
+    applicationDeadline: meeting.applicationDeadline,
+    status: meeting.status
   });
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(storageKey(meeting.id));
-      if (raw) setSettings({ ...settings, ...(JSON.parse(raw) as Partial<StoredMeetingSettings>) });
-    } catch {
-      setSettings({
-        date: meeting.date,
-        startTime: meeting.startTime,
-        endTime: meeting.endTime,
-        venueName: meeting.venueName,
-        venueAddress: meeting.venueAddress
-      });
-    }
-
-    const refreshCount = () => setAttendeeCount(countMeetingAttendees(meeting.id, members, participants));
+    let active = true;
+    const refreshCount = () => { void fetchStoredParticipants(meeting.id).then(stored => {
+      if (active) setAttendeeCount(storedParticipantsValueToParticipants(meeting.id, members, participants, stored).filter(p => p.status === "参加" || p.status === "ゲスト").length);
+    }).catch(() => undefined); };
     refreshCount();
-    return subscribeStoredParticipants(meeting.id, refreshCount);
+    const unsubscribe = subscribeStoredParticipants(meeting.id, refreshCount);
+    return () => { active = false; unsubscribe(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meeting.id, members, participants]);
 
-  function update(field: keyof StoredMeetingSettings, value: string) {
+  function update<K extends keyof StoredMeetingSettings>(field: K, value: StoredMeetingSettings[K]) {
     setSaved(false);
     setSettings((current) => ({ ...current, [field]: value }));
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
+    setError("");
     const next = { ...meeting, ...settings };
     try {
       const savedMeeting = await saveMeetingRecord(next);
-      window.localStorage.setItem(storageKey(meeting.id), JSON.stringify(settings));
       onSaved(savedMeeting);
       setSaved(true);
-    } catch {
+    } catch (error) {
       setSaved(false);
-    }
+      setError(error instanceof Error ? error.message : "保存できませんでした。");
+    } finally { setIsSaving(false); }
   }
 
   return (
@@ -90,8 +88,12 @@ export function MeetingSettingsPanel({
       </button>
 
       {isOpen && (
-        <form onSubmit={save} className="mt-4 grid gap-4 rounded border border-slate-200 bg-snow p-4 md:grid-cols-2">
+        <form onSubmit={save} className="mt-4 rounded border border-slate-200 bg-snow p-4"><fieldset disabled={isSaving} className="grid gap-4 md:grid-cols-2">
           {saved && <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-forest md:col-span-2">保存しました。</p>}
+          {error && <p role="alert" className="rounded bg-red-50 p-3 text-accent md:col-span-2">{error}</p>}
+          <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">月例会名</span><input required value={settings.title} onChange={(event) => update("title", event.target.value)} className="focus-ring rounded border px-3 py-3" /></label>
+          <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">回答期限</span><input required type="date" value={settings.applicationDeadline} onChange={(event) => update("applicationDeadline", event.target.value)} className="focus-ring rounded border px-3 py-3" /></label>
+          <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">状態</span><select value={settings.status} onChange={(event) => update("status", event.target.value as Meeting["status"])} className="focus-ring rounded border px-3 py-3"><option>下書き</option><option>確定</option><option>終了</option></select></label>
           <label className="grid gap-2">
             <span className="text-sm font-bold text-slate-600">日時</span>
             <input type="date" value={settings.date} onChange={(event) => update("date", event.target.value)} className="focus-ring rounded border border-slate-200 px-3 py-3" />
@@ -120,12 +122,12 @@ export function MeetingSettingsPanel({
             <p className="mt-1 text-xs font-bold text-slate-500">参加者管理から自動反映</p>
           </div>
           <div className="flex items-end md:justify-end">
-            <button type="submit" className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-5 py-3 text-sm font-bold text-white">
+            <button type="submit" disabled={isSaving} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
               <Save size={16} />
-              保存
+              {isSaving ? "保存中…" : "保存"}
             </button>
           </div>
-        </form>
+        </fieldset></form>
       )}
     </div>
   );

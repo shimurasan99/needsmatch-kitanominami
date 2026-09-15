@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { ImagePlus, Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchGalleryImages, saveGalleryImages } from "@/lib/data/gallery-overrides";
+import { readResizedImage } from "@/lib/data/image-upload";
 import type { GalleryImage } from "@/types/domain";
 
 const maxImages = 10;
@@ -12,9 +13,14 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
   const [images, setImages] = useState<GalleryImage[]>(initialImages.slice(0, maxImages));
   const [saved, setSaved] = useState(false);
   const [message, setMessage] = useState("");
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const baseline = useRef(initialImages.slice(0, maxImages));
 
   useEffect(() => {
-    void fetchGalleryImages(initialImages).then(setImages).catch(() => setMessage("共有データを読み込めませんでした。"));
+    let active = true;
+    void fetchGalleryImages(initialImages).then((next) => { if (active) { baseline.current = next; setImages(next); setIsLoaded(true); } }).catch(() => { if (active) setMessage("共有データを読み込めませんでした。再読み込みしてください。"); });
+    return () => { active = false; };
   }, [initialImages]);
 
   function updateImage(id: string, field: keyof Omit<GalleryImage, "id">, value: string) {
@@ -28,7 +34,7 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
     setImages((current) => [
       ...current,
       {
-        id: `gallery-${Date.now()}`,
+        id: `gallery-${crypto.randomUUID()}`,
         title: "新しい写真",
         description: "写真の説明文を入力してください。",
         imageUrl: "/images/gallery-1.svg",
@@ -43,25 +49,36 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
   }
 
   async function saveImages() {
-    try { await saveGalleryImages(images); setSaved(true); setMessage(""); }
+    if (isBusy || !isLoaded) return;
+    setIsBusy(true);
+    try { const next = await saveGalleryImages(images, baseline.current); baseline.current = next; setImages(next); setSaved(true); setMessage(""); }
     catch (error) { setSaved(false); setMessage(error instanceof Error ? error.message : "保存できませんでした。"); }
+    finally { setIsBusy(false); }
   }
 
   async function resetImages() {
-    setImages(initialImages.slice(0, maxImages));
-    try { await saveGalleryImages(initialImages.slice(0, maxImages)); setSaved(true); }
-    catch { setMessage("初期状態を保存できませんでした。"); }
+    if (isBusy || !isLoaded) return;
+    setIsBusy(true);
+    try { const next = await saveGalleryImages(initialImages.slice(0, maxImages), baseline.current); baseline.current = next; setImages(next); setSaved(true); setMessage(""); }
+    catch (error) { setSaved(false); setMessage(error instanceof Error ? error.message : "初期状態を保存できませんでした。"); }
+    finally { setIsBusy(false); }
   }
 
   async function uploadImage(id: string, file: File | undefined) {
-    if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    updateImage(id, "imageUrl", dataUrl);
-    updateImage(id, "alt", file.name.replace(/\.[^.]+$/, "") || "北のみなみ支部の写真");
+    if (!file || isBusy || !isLoaded) return;
+    setIsBusy(true);
+    try {
+      if (!file.type.startsWith("image/")) throw new Error("画像ファイルを選択してください。");
+      const dataUrl = await readResizedImage(file);
+      updateImage(id, "imageUrl", dataUrl);
+      updateImage(id, "alt", file.name.replace(/\.[^.]+$/, "") || "北のみなみ支部の写真");
+      setMessage("");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "画像を読み込めませんでした。別の画像をお試しください。"); }
+    finally { setIsBusy(false); }
   }
 
   return (
-    <div className="space-y-5">
+    <fieldset disabled={!isLoaded || isBusy} className="space-y-5">
       <div className="rounded border border-slate-200 bg-white p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -94,7 +111,7 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
           <article key={image.id} className="grid gap-4 rounded border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[280px_1fr]">
             <div>
               <div className="relative overflow-hidden rounded border border-slate-200 bg-snow">
-                <Image src={image.imageUrl} alt={image.alt} width={560} height={420} className="aspect-[4/3] w-full object-cover" unoptimized={image.imageUrl.startsWith("data:")} />
+                <Image src={image.imageUrl || "/images/gallery-1.svg"} alt={image.alt} width={560} height={420} className="aspect-[4/3] w-full object-cover" unoptimized />
                 <div className="absolute inset-x-0 bottom-0 bg-deep/72 p-3 text-white">
                   <p className="text-sm font-black">{image.title}</p>
                   <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/90">{image.description}</p>
@@ -103,7 +120,7 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
               <label className="focus-ring mt-3 flex cursor-pointer items-center justify-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-deep hover:bg-snow">
                 <Upload size={16} />
                 写真をアップロード
-                <input type="file" accept="image/*" onChange={(event) => uploadImage(image.id, event.target.files?.[0])} className="sr-only" />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => uploadImage(image.id, event.target.files?.[0])} className="sr-only" />
               </label>
             </div>
 
@@ -146,15 +163,6 @@ export function GalleryManager({ initialImages }: { initialImages: GalleryImage[
           初期状態に戻す
         </button>
       </div>
-    </div>
+    </fieldset>
   );
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }

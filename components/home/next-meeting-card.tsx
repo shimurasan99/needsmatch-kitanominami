@@ -14,7 +14,7 @@ export function NextMeetingCard({ initialMeetings }: { initialMeetings: Meeting[
     let active = true;
     void fetchMeetings(initialMeetings).then((loadedMeetings) => {
       if (active) setManagedMeetings(loadedMeetings);
-    });
+    }).catch(() => undefined);
     return () => {
       active = false;
     };
@@ -25,12 +25,10 @@ export function NextMeetingCard({ initialMeetings }: { initialMeetings: Meeting[
     const confirmedMeetings = managedMeetings
       .filter((meeting) => meeting.status === "確定")
       .sort((a, b) => a.date.localeCompare(b.date));
-    return confirmedMeetings.find((meeting) => meeting.date >= today)
-      ?? confirmedMeetings.at(-1)
-      ?? managedMeetings[0];
+    return confirmedMeetings.find((meeting) => meeting.date >= today);
   }, [managedMeetings]);
 
-  if (!nextMeeting) return null;
+  if (!nextMeeting) return <div className="glass-panel rounded p-6 text-deep"><h2 className="text-2xl font-black">次回定例会</h2><p className="mt-3">次回の日程は決まり次第お知らせします。</p></div>;
 
   const meetingVenue = [nextMeeting.venueName, nextMeeting.venueAddress]
     .filter(Boolean)

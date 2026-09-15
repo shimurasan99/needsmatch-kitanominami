@@ -19,7 +19,7 @@ export default function JoinPage() {
         </ul>
         <div className="mt-6 flex flex-wrap gap-3">
           <ButtonLink href="https://pro.form-mailer.jp/fms/9fc637d4348723" external>一般入会フォームへ</ButtonLink>
-          <ButtonLink href="/entry" variant="secondary">新規入会特典について問い合わせる</ButtonLink>
+          <ButtonLink href="/entry" variant="secondary">参加申し込みページへ</ButtonLink>
         </div>
       </div>
     </section>

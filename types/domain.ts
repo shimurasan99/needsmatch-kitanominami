@@ -27,6 +27,7 @@ export type Member = {
 };
 
 export type Meeting = {
+  updatedAt?: string;
   id: string;
   title: string;
   date: string;

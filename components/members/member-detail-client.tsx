@@ -8,22 +8,29 @@ import { fetchManagedMembers } from "@/lib/data/member-overrides";
 import type { Member } from "@/types/domain";
 
 export function MemberDetailClient({ memberId, initialMembers }: { memberId: string; initialMembers: Member[] }) {
-  const [member, setMember] = useState<Member | undefined>(() => initialMembers.find((item) => item.id === memberId && item.isVisible));
+  const [member, setMember] = useState<Member | undefined>();
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    let active = true;
+    setLoaded(false);
+    setMember(undefined);
+    setLoadError("");
     void fetchManagedMembers(initialMembers).then((allMembers) => {
+      if (!active) return;
       setMember(allMembers.find((item) => item.id === memberId && item.isVisible && item.status === "在籍"));
       setLoaded(true);
-    }).catch(() => setLoaded(true));
+    }).catch(() => { if (active) { setLoadError("会員情報を読み込めませんでした。再読み込みしてください。"); setLoaded(true); } });
+    return () => { active = false; };
   }, [initialMembers, memberId]);
 
-  if (!member) return <p className="mx-auto max-w-3xl px-4 py-16 text-center font-bold text-slate-600">{loaded ? "会員情報が見つかりませんでした。" : "会員情報を読み込んでいます..."}</p>;
+  if (!member) return <p className="mx-auto max-w-3xl px-4 py-16 text-center font-bold text-slate-600">{loadError || (loaded ? "会員情報が見つかりませんでした。" : "会員情報を読み込んでいます...")}</p>;
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
       <div className="grid gap-8 rounded border border-slate-200 bg-white p-6 shadow-soft md:grid-cols-[240px_1fr]">
-        <Image src={member.profileImageUrl} alt={member.name} width={320} height={320} unoptimized={member.profileImageUrl.startsWith("data:")} className="aspect-square w-full rounded object-cover" />
+        <Image src={member.profileImageUrl || "/images/member-1.svg"} alt={member.name} width={320} height={320} unoptimized className="aspect-square w-full rounded object-cover" />
         <div>
           <p className="text-sm font-bold text-forest">会員No.{member.memberNo}</p>
           <h1 className="mt-2 text-4xl font-black text-deep">{member.name}</h1>

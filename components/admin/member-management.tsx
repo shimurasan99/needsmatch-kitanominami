@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { Download, Plus, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { deleteSharedMember, fetchManagedMembers, saveMemberAddition } from "@/lib/data/member-overrides";
+import { deleteSharedMember, fetchManagedMembers, saveMemberAddition, saveMemberAdditions } from "@/lib/data/member-overrides";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
+import { csvCell } from "@/lib/data/csv-export";
 import type { MajorIndustry, Member, RoleName } from "@/types/domain";
 
 const roles: RoleName[] = ["主催", "事務局長", "幹事", "役員", "支部サポーター", "準役員", "一般会員"];
@@ -13,11 +14,15 @@ const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容な�
 
 export function MemberManagement({ initialMembers }: { initialMembers: Member[] }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const managementRef = useRef<HTMLDivElement>(null);
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [newMember, setNewMember] = useState({
     memberNo: "",
     name: "",
@@ -31,11 +36,30 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
   const sortedMembers = useMemo(() => sortMembersForDirectory(members), [members]);
 
   useEffect(() => {
-    void fetchManagedMembers(initialMembers).then(setMembers).catch(() => setMessage("共有データを読み込めませんでした。再読み込みしてください。"));
+    if (!memberToDelete) return;
+    const dialog = deleteDialogRef.current;
+    if (!dialog) return;
+    const management = managementRef.current;
+    dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>("[data-dialog-cancel]")?.focus();
+    return () => {
+      dialog.close();
+      const trigger = deleteTriggerRef.current;
+      if (trigger?.isConnected) trigger.focus();
+      else management?.focus();
+    };
+  }, [memberToDelete]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchManagedMembers(initialMembers).then((next) => {
+      if (active) { setMembers(next); setIsLoaded(true); }
+    }).catch(() => { if (active) setMessage("共有データを読み込めませんでした。再読み込みしてください。"); });
+    return () => { active = false; };
   }, [initialMembers]);
 
   async function confirmDeleteMember() {
-    if (!memberToDelete) return;
+    if (!memberToDelete || isSaving || !isLoaded) return;
     setIsSaving(true);
     try {
       await deleteSharedMember(memberToDelete.id);
@@ -51,9 +75,13 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
 
   async function addMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newMember.memberNo || !newMember.name) return;
+    if (isSaving || !isLoaded) return;
+    if (!newMember.memberNo.trim() || !newMember.name.trim()) {
+      setMessage("会員番号と氏名を入力してください。");
+      return;
+    }
     const addition: Member = {
-      id: `custom-${Date.now()}`,
+      id: `custom-${crypto.randomUUID()}`,
       memberNo: newMember.memberNo,
       name: newMember.name,
       kana: "",
@@ -77,6 +105,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
       setMembers(await saveMemberAddition(initialMembers, addition));
       setMessage("新規会員を登録しました。");
       setIsNewOpen(false);
+      setNewMember({ memberNo: "", name: "", company: "", industry: "", majorIndustry: "その他", position: "一般会員", isTableLeader: false });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "会員を登録できませんでした。");
     } finally {
@@ -100,7 +129,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
         member.websiteUrl
       ]);
     });
-    const csv = rows.map((row) => row.map((value) => `"${value.replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -111,11 +140,15 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
   }
 
   async function importCsv(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file || isSaving || !isLoaded) return;
+    setIsSaving(true);
+    try {
     const text = await file.text();
-    const rows = parseCsv(text);
+    const rows = parseCsv(text.replace(/^\uFEFF/, ""));
     const [header, ...body] = rows;
+    if (!header || !header.includes("会員番号") || !header.includes("氏名")) throw new Error("CSVには「会員番号」と「氏名」の列が必要です。");
     const imported = body
       .filter((row) => row.some(Boolean))
       .map((row, index) => {
@@ -123,7 +156,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
         const position = roles.includes(get("役職") as RoleName) ? (get("役職") as RoleName) : "一般会員";
         const majorIndustry = majorIndustries.includes(get("大業種") as MajorIndustry) ? (get("大業種") as MajorIndustry) : "その他";
         return {
-          id: `import-${Date.now()}-${index}`,
+          id: `import-${crypto.randomUUID()}-${index}`,
           memberNo: get("会員番号"),
           name: get("氏名"),
           kana: "",
@@ -143,30 +176,30 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
           isVisible: true
         };
       });
-    try {
-      let next = members;
-      for (const member of imported) next = await saveMemberAddition(initialMembers, member);
-      setMembers(next);
+      if (!imported.length) throw new Error("CSVに登録する会員がありません。");
+      setMembers(await saveMemberAdditions(initialMembers, imported));
       setMessage(`${imported.length}名をCSVからインポートしました。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "CSVをインポートできませんでした。");
+    } finally {
+      input.value = "";
+      setIsSaving(false);
     }
-    event.target.value = "";
   }
 
   return (
-    <div>
+    <div ref={managementRef} tabIndex={-1}>
       <div className="mb-4 flex flex-wrap gap-2">
-        <button type="button" onClick={() => setIsNewOpen((current) => !current)} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white">
+        <button type="button" disabled={isSaving || !isLoaded} onClick={() => setIsNewOpen((current) => !current)} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
           <Plus size={16} />
           新規登録
         </button>
-        <button type="button" onClick={() => fileInputRef.current?.click()} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-4 py-2 text-sm font-bold">
+        <button type="button" disabled={isSaving || !isLoaded} onClick={() => fileInputRef.current?.click()} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-4 py-2 text-sm font-bold disabled:opacity-50">
           <Upload size={16} />
           CSVインポート
         </button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={importCsv} className="sr-only" />
-        <button type="button" onClick={exportCsv} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-4 py-2 text-sm font-bold">
+        <button type="button" disabled={isSaving || !isLoaded} onClick={exportCsv} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 bg-white px-4 py-2 text-sm font-bold disabled:opacity-50">
           <Download size={16} />
           CSVエクスポート
         </button>
@@ -199,7 +232,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
           </div>
         </form>
       )}
-      <div className="overflow-hidden rounded border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded border border-slate-200 bg-white">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="bg-snow text-slate-600">
             <tr>
@@ -217,7 +250,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
               <tr key={member.id} className="border-t border-slate-100">
                 <td className="p-3">
                   <div className="flex items-center gap-3">
-                    <Image src={member.profileImageUrl} alt="" width={40} height={40} className="h-10 w-10 rounded object-cover" />
+                    <Image src={member.profileImageUrl || "/images/member-1.svg"} alt="" width={40} height={40} unoptimized className="h-10 w-10 rounded object-cover" />
                     <div><p className="font-bold">{member.name}</p><p className="text-xs text-slate-500">会員No.{member.memberNo}</p></div>
                   </div>
                 </td>
@@ -233,7 +266,8 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
                     </Link>
                     <button
                       type="button"
-                      onClick={() => setMemberToDelete(member)}
+                      disabled={isSaving || !isLoaded}
+                      onClick={(event) => { deleteTriggerRef.current = event.currentTarget; setMemberToDelete(member); }}
                       className="focus-ring inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1 font-bold text-red-700 hover:bg-red-50"
                     >
                       <Trash2 size={14} />
@@ -247,17 +281,17 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
         </table>
       </div>
       {memberToDelete && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-member-title">
+        <dialog ref={deleteDialogRef} className="m-auto w-[calc(100%_-_2rem)] max-w-md rounded border-0 bg-transparent p-0 backdrop:bg-slate-950/60" aria-labelledby="delete-member-title" aria-describedby="delete-member-description" onCancel={(event) => { if (isSaving) event.preventDefault(); else setMemberToDelete(null); }}>
           <div className="w-full max-w-md rounded border border-red-200 bg-white p-6 shadow-xl">
             <div className="flex items-center gap-3 text-red-700">
               <Trash2 size={24} />
               <h2 id="delete-member-title" className="text-xl font-black">本当に削除しますか？</h2>
             </div>
-            <p className="mt-4 leading-7 text-slate-700">
+            <p id="delete-member-description" className="mt-4 leading-7 text-slate-700">
               <span className="font-black text-deep">{memberToDelete.name}</span>さんの会員情報を削除します。この操作は元に戻せません。
             </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setMemberToDelete(null)} className="focus-ring rounded border border-slate-200 px-4 py-2 font-bold text-deep hover:bg-snow">
+              <button data-dialog-cancel type="button" disabled={isSaving} onClick={() => setMemberToDelete(null)} className="focus-ring rounded border border-slate-200 px-4 py-2 font-bold text-deep hover:bg-snow">
                 キャンセル
               </button>
               <button type="button" disabled={isSaving} onClick={confirmDeleteMember} className="focus-ring inline-flex items-center gap-2 rounded bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700 disabled:opacity-50">
@@ -266,7 +300,7 @@ export function MemberManagement({ initialMembers }: { initialMembers: Member[] 
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       )}
     </div>
   );

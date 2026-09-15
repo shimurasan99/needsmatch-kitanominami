@@ -1,5 +1,5 @@
 import type { Member } from "@/types/domain";
-import { fetchSharedState, saveSharedState } from "@/lib/data/shared-state";
+import { fetchSharedState, updateSharedState } from "@/lib/data/shared-state";
 
 export const MEMBER_OVERRIDES_KEY = "nm_member_overrides";
 export const MEMBER_ADDITIONS_KEY = "nm_member_additions";
@@ -71,46 +71,57 @@ export function deleteMemberRecord(memberId: string) {
 }
 
 export async function fetchManagedMembers(initialMembers: Member[]): Promise<Member[]> {
-  const shared = await fetchSharedState<SharedMembers>("members");
-  if (!shared) return applyMemberOverrides(initialMembers, readMemberOverrides());
+  const shared = await fetchSharedState<SharedMembers>("members") ?? emptySharedMembers();
   cacheSharedMembers(shared);
   return mergeMembers(initialMembers, shared);
 }
 
 export async function saveMemberAddition(initialMembers: Member[], member: Member): Promise<Member[]> {
-  const current = await currentSharedMembers();
-  if ([...initialMembers, ...current.additions].some((item) => item.memberNo.trim() === member.memberNo.trim())) {
-    throw new Error(`会員No.${member.memberNo}は既に使用されています。`);
-  }
-  const next = { ...current, additions: [...current.additions, member] };
-  await saveSharedState("members", next);
+  return saveMemberAdditions(initialMembers, [member]);
+}
+
+export async function saveMemberAdditions(initialMembers: Member[], members: Member[]): Promise<Member[]> {
+  const next = await updateSharedState<SharedMembers>("members", (shared) => {
+    const current = shared ?? emptySharedMembers();
+    const usedNumbers = new Set(mergeMembers(initialMembers, current).map((item) => item.memberNo.trim()));
+    const additions = members.map((member) => {
+      const cleaned = { ...member, memberNo: member.memberNo.trim(), name: member.name.trim() };
+      if (!cleaned.memberNo || !cleaned.name) throw new Error("会員番号と氏名を入力してください。");
+      if (usedNumbers.has(cleaned.memberNo)) throw new Error(`会員No.${cleaned.memberNo}は既に使用されています。`);
+      usedNumbers.add(cleaned.memberNo);
+      return cleaned;
+    });
+    return { ...current, additions: [...current.additions, ...additions] };
+  });
   cacheSharedMembers(next);
   return mergeMembers(initialMembers, next);
 }
 
 export async function saveMemberOverride(memberId: string, values: Partial<MemberEditableFields>) {
-  const current = await currentSharedMembers();
-  const next = { ...current, overrides: { ...current.overrides, [memberId]: { ...(current.overrides[memberId] ?? {}), ...values } } };
-  await saveSharedState("members", next);
+  const next = await updateSharedState<SharedMembers>("members", (shared) => {
+    const current = shared ?? emptySharedMembers();
+    if (current.deletions.includes(memberId)) throw new Error("この会員は削除されています。会員一覧を再読み込みしてください。");
+    return { ...current, overrides: { ...current.overrides, [memberId]: { ...(current.overrides[memberId] ?? {}), ...values } } };
+  });
   cacheSharedMembers(next);
 }
 
 export async function deleteSharedMember(memberId: string) {
-  const current = await currentSharedMembers();
-  const overrides = { ...current.overrides };
-  delete overrides[memberId];
-  const next: SharedMembers = {
-    additions: current.additions.filter((member) => member.id !== memberId),
-    overrides,
-    deletions: [...new Set([...current.deletions, memberId])]
-  };
-  await saveSharedState("members", next);
+  const next = await updateSharedState<SharedMembers>("members", (shared) => {
+    const current = shared ?? emptySharedMembers();
+    const overrides = { ...current.overrides };
+    delete overrides[memberId];
+    return {
+      additions: current.additions.filter((member) => member.id !== memberId),
+      overrides,
+      deletions: [...new Set([...current.deletions, memberId])]
+    };
+  });
   cacheSharedMembers(next);
 }
 
-async function currentSharedMembers(): Promise<SharedMembers> {
-  const shared = await fetchSharedState<SharedMembers>("members");
-  return shared ?? { additions: readMemberAdditions(), overrides: readMemberOverrides(), deletions: readDeletedMemberIds() };
+function emptySharedMembers(): SharedMembers {
+  return { additions: [], overrides: {}, deletions: [] };
 }
 
 function mergeMembers(initialMembers: Member[], state: SharedMembers) {
@@ -122,8 +133,12 @@ function mergeMembers(initialMembers: Member[], state: SharedMembers) {
 
 function cacheSharedMembers(state: SharedMembers) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(MEMBER_ADDITIONS_KEY, JSON.stringify(state.additions));
-  window.localStorage.setItem(MEMBER_OVERRIDES_KEY, JSON.stringify(state.overrides));
-  window.localStorage.setItem(MEMBER_DELETIONS_KEY, JSON.stringify(state.deletions));
+  try {
+    window.localStorage.setItem(MEMBER_ADDITIONS_KEY, JSON.stringify(state.additions));
+    window.localStorage.setItem(MEMBER_OVERRIDES_KEY, JSON.stringify(state.overrides));
+    window.localStorage.setItem(MEMBER_DELETIONS_KEY, JSON.stringify(state.deletions));
+  } catch {
+    // The server is authoritative even when browser storage is full or disabled.
+  }
   window.dispatchEvent(new Event("nm-members-updated"));
 }

@@ -10,10 +10,13 @@ import { SocialLinks } from "@/components/members/social-links";
 import type { Member } from "@/types/domain";
 
 export function MemberDirectory({ initialMembers, q, major, role }: { initialMembers: Member[]; q: string; major: string; role: string }) {
-  const [members, setMembers] = useState(initialMembers);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [message, setMessage] = useState("会員情報を読み込んでいます...");
 
   useEffect(() => {
-    void fetchManagedMembers(initialMembers).then(setMembers).catch(() => setMembers(initialMembers));
+    let active = true;
+    void fetchManagedMembers(initialMembers).then((next) => { if (active) { setMembers(next); setMessage(""); } }).catch(() => { if (active) setMessage("会員情報を読み込めませんでした。再読み込みしてください。"); });
+    return () => { active = false; };
   }, [initialMembers]);
 
   const visible = useMemo(() => {
@@ -53,12 +56,13 @@ export function MemberDirectory({ initialMembers, q, major, role }: { initialMem
         <button className="focus-ring rounded bg-forest px-5 py-3 font-bold text-white">検索</button>
       </form>
 
+      {message && <p className="mt-8 text-sm text-slate-600">{message}</p>}
       <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((member) => (
           <article key={member.id} className="rounded border border-slate-200 bg-white p-5 shadow-soft hover:border-forest">
             <Link href={`/members/${member.id}`} className="focus-ring block rounded">
               <div className="flex gap-4">
-                <Image src={member.profileImageUrl} alt={member.name} width={96} height={96} className="h-20 w-20 rounded object-cover" />
+                <Image src={member.profileImageUrl || "/images/member-1.svg"} alt={member.name} width={96} height={96} unoptimized className="h-20 w-20 rounded object-cover" />
                 <div>
                   <p className="text-xs font-bold text-forest">会員No.{member.memberNo}</p>
                   <h2 className="mt-1 text-xl font-black text-deep">{member.name}</h2>

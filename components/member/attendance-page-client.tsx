@@ -9,23 +9,29 @@ import type { Meeting, Member } from "@/types/domain";
 export function AttendancePageClient({ initialMeetings, members }: { initialMeetings: Meeting[]; members: Member[] }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   const [managedMembers, setManagedMembers] = useState(members);
+  const [loadError, setLoadError] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
   const upcoming = useMemo(() => meetings.filter((meeting) => meeting.status === "確定" && meeting.date >= today).sort((a, b) => a.date.localeCompare(b.date)), [meetings, today]);
   const [meetingId, setMeetingId] = useState(upcoming[0]?.id ?? "");
 
   useEffect(() => {
-    void fetchMeetings(initialMeetings).then((value) => {
+    let active = true;
+    setLoaded(false);
+    Promise.all([fetchMeetings(initialMeetings), fetchManagedMembers(members)]).then(([value, nextMembers]) => {
+      if (!active) return;
       setMeetings(value);
+      setManagedMembers(nextMembers);
       const first = value.filter((meeting) => meeting.status === "確定" && meeting.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
       setMeetingId((current) => value.some((meeting) => meeting.id === current && meeting.status === "確定" && meeting.date >= today) ? current : first?.id ?? "");
-    });
-  }, [initialMeetings, today]);
-
-  useEffect(() => {
-    void fetchManagedMembers(members).then(setManagedMembers).catch(() => setManagedMembers(members));
-  }, [members]);
+      setLoaded(true);
+    }).catch(error => { if (active) setLoadError(error.message); });
+    return () => { active = false; };
+  }, [initialMeetings, members, today]);
 
   const meeting = upcoming.find((item) => item.id === meetingId) ?? upcoming[0];
+  if (loadError) return <p role="alert" className="mt-8 rounded bg-red-50 p-5 text-accent">{loadError}</p>;
+  if (!loaded) return <p role="status" className="mt-8">出欠情報を読み込み中…</p>;
   if (!meeting) return <p className="mt-8 rounded bg-snow p-5 font-bold text-slate-600">現在、回答受付中の月例会はありません。</p>;
 
   return (

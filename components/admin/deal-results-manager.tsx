@@ -2,28 +2,36 @@
 
 import Image from "next/image";
 import { Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchDealResults, saveDealResults } from "@/lib/data/deal-results-storage";
+import { fetchManagedMembers } from "@/lib/data/member-overrides";
+import { readResizedImage } from "@/lib/data/image-upload";
 import type { DealIndustry, DealResult, Member } from "@/types/domain";
 
 const dealIndustries: DealIndustry[] = ["美容", "商材", "イベント", "IT", "販売", "飲食", "保険", "不動産", "営業", "研修"];
 
 export function DealResultsManager({ initialDeals, members }: { initialDeals: DealResult[]; members: Member[] }) {
   const [deals, setDeals] = useState<DealResult[]>(initialDeals);
+  const [managedMembers, setManagedMembers] = useState(members);
   const [saved, setSaved] = useState(false);
   const [message, setMessage] = useState("");
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const baseline = useRef(initialDeals);
 
   useEffect(() => {
-    void fetchDealResults(initialDeals).then(setDeals).catch(() => setMessage("共有データを読み込めませんでした。"));
-  }, [initialDeals]);
+    let active = true;
+    void Promise.all([fetchDealResults(initialDeals), fetchManagedMembers(members)]).then(([next, currentMembers]) => { if (active) { baseline.current = next; setDeals(next); setManagedMembers(currentMembers); setIsLoaded(true); } }).catch(() => { if (active) setMessage("共有データを読み込めませんでした。再読み込みしてください。"); });
+    return () => { active = false; };
+  }, [initialDeals, members]);
 
   function addDeal() {
     setSaved(false);
     setDeals((current) => [
       {
-        id: `deal-${Date.now()}`,
-        fromMemberName: members[0]?.name ?? "",
-        toMemberName: members[1]?.name ?? "",
+        id: `deal-${crypto.randomUUID()}`,
+        fromMemberName: managedMembers[0]?.name ?? "",
+        toMemberName: managedMembers[1]?.name ?? "",
         month: new Date().toISOString().slice(0, 7),
         industry: "IT",
         description: "",
@@ -45,29 +53,43 @@ export function DealResultsManager({ initialDeals, members }: { initialDeals: De
   }
 
   async function saveDeals() {
+    if (isBusy || !isLoaded) return;
+    setIsBusy(true);
     try {
-      await saveDealResults(deals);
+      if (deals.some((deal) => !deal.fromMemberName.trim() || !deal.toMemberName.trim() || !deal.month || !Number.isFinite(deal.sales) || deal.sales < 0)) throw new Error("紹介元・紹介先・年月と、0以上の売上を入力してください。");
+      const next = await saveDealResults(deals, baseline.current);
+      baseline.current = next;
+      setDeals(next);
       setSaved(true);
       setMessage("");
     } catch (error) {
       setSaved(false);
       setMessage(error instanceof Error ? error.message : "保存できませんでした。");
-    }
+    } finally { setIsBusy(false); }
   }
 
   async function resetDeals() {
-    setDeals(initialDeals);
-    try { await saveDealResults(initialDeals); setSaved(true); } catch { setMessage("初期状態を保存できませんでした。"); }
+    if (isBusy || !isLoaded) return;
+    setIsBusy(true);
+    try { const next = await saveDealResults(initialDeals, baseline.current); baseline.current = next; setDeals(next); setSaved(true); setMessage(""); }
+    catch (error) { setSaved(false); setMessage(error instanceof Error ? error.message : "初期状態を保存できませんでした。"); }
+    finally { setIsBusy(false); }
   }
 
   async function uploadImage(id: string, file: File | undefined) {
-    if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    updateDeal(id, { imageUrl: dataUrl });
+    if (!file || isBusy || !isLoaded) return;
+    setIsBusy(true);
+    try {
+      if (!file.type.startsWith("image/")) throw new Error("画像ファイルを選択してください。");
+      const dataUrl = await readResizedImage(file);
+      updateDeal(id, { imageUrl: dataUrl });
+      setMessage("");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "画像を読み込めませんでした。別の画像をお試しください。"); }
+    finally { setIsBusy(false); }
   }
 
   return (
-    <div className="space-y-5">
+    <fieldset disabled={!isLoaded || isBusy} className="space-y-5">
       <div className="rounded border border-slate-200 bg-white p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -94,12 +116,12 @@ export function DealResultsManager({ initialDeals, members }: { initialDeals: De
           <article key={deal.id} className="grid gap-4 rounded border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[300px_1fr]">
             <div>
               <div className="overflow-hidden rounded border border-slate-200 bg-snow">
-                <Image src={deal.imageUrl} alt="商談成立実績の写真" width={600} height={420} className="aspect-[4/3] w-full object-cover" unoptimized={deal.imageUrl.startsWith("data:")} />
+                <Image src={deal.imageUrl || "/images/kitanominami-page-main.jpg"} alt="商談成立実績の写真" width={600} height={420} className="aspect-[4/3] w-full object-cover" unoptimized />
               </div>
               <label className="focus-ring mt-3 flex cursor-pointer items-center justify-center gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-deep hover:bg-snow">
                 <Upload size={16} />
                 写真をアップロード
-                <input type="file" accept="image/*" onChange={(event) => uploadImage(deal.id, event.target.files?.[0])} className="sr-only" />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => uploadImage(deal.id, event.target.files?.[0])} className="sr-only" />
               </label>
             </div>
 
@@ -113,8 +135,8 @@ export function DealResultsManager({ initialDeals, members }: { initialDeals: De
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <MemberSelect label="紹介元会員" value={deal.fromMemberName} members={members} onChange={(value) => updateDeal(deal.id, { fromMemberName: value })} />
-                <MemberSelect label="紹介先会員" value={deal.toMemberName} members={members} onChange={(value) => updateDeal(deal.id, { toMemberName: value })} />
+                <MemberSelect label="紹介元会員" value={deal.fromMemberName} members={managedMembers} onChange={(value) => updateDeal(deal.id, { fromMemberName: value })} />
+                <MemberSelect label="紹介先会員" value={deal.toMemberName} members={managedMembers} onChange={(value) => updateDeal(deal.id, { toMemberName: value })} />
                 <label className="grid gap-2">
                   <span className="text-sm font-bold text-slate-600">年月</span>
                   <input type="month" value={deal.month} onChange={(event) => updateDeal(deal.id, { month: event.target.value })} className="focus-ring rounded border border-slate-200 px-3 py-3" />
@@ -161,7 +183,7 @@ export function DealResultsManager({ initialDeals, members }: { initialDeals: De
           初期状態に戻す
         </button>
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -170,17 +192,9 @@ function MemberSelect({ label, value, members, onChange }: { label: string; valu
     <label className="grid gap-2">
       <span className="text-sm font-bold text-slate-600">{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)} className="focus-ring rounded border border-slate-200 bg-white px-3 py-3">
+        {!members.some((member) => member.name === value) && <option value={value}>{value || "会員を選択してください"}</option>}
         {members.map((member) => <option key={member.id} value={member.name}>{member.name}</option>)}
       </select>
     </label>
   );
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }

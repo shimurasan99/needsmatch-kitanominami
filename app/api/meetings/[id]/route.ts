@@ -1,37 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isAdminRequest } from "@/lib/auth";
+import { meetingFromRow, meetingToRow, validateMeeting } from "@/lib/data/meeting-record";
 import type { Meeting } from "@/types/domain";
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
-  if (request.cookies.get("nm_admin_auth")?.value !== "ok") return NextResponse.json({ error: "管理者権限が必要です。" }, { status: 403 });
+export async function PUT(request: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
+  if (!(await isAdminRequest(request))) return NextResponse.json({ error: "運営ページから再度ログインしてください。" }, { status: 403 });
   const supabase = createSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: "保存先が未設定です。" }, { status: 503 });
-  const meeting = await request.json() as Meeting;
-  const row = {
-    meeting_key: params.id,
-    title: meeting.title,
-    meeting_date: meeting.date,
-    start_time: meeting.startTime,
-    end_time: meeting.endTime,
-    venue_name: meeting.venueName,
-    venue_address: meeting.venueAddress,
-    note: meeting.note,
-    application_deadline: meeting.applicationDeadline,
-    status: meeting.status,
-    updated_at: new Date().toISOString()
-  };
-  const { data, error } = await supabase.from("managed_meetings").upsert(row, { onConflict: "meeting_key" }).select("*").single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({
-    id: data.meeting_key,
-    title: data.title,
-    date: data.meeting_date,
-    startTime: data.start_time.slice(0, 5),
-    endTime: data.end_time.slice(0, 5),
-    venueName: data.venue_name,
-    venueAddress: data.venue_address,
-    note: data.note,
-    applicationDeadline: data.application_deadline,
-    status: data.status
-  });
+  const meeting = await request.json().catch(() => null) as Meeting;
+  const invalid = validateMeeting(meeting);
+  if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
+  const row = meetingToRow({ ...meeting, id: params.id });
+  const { data, error } = meeting.updatedAt
+    ? await supabase.from("managed_meetings").update(row).eq("meeting_key", params.id).eq("updated_at", meeting.updatedAt).select("*").maybeSingle()
+    : await supabase.from("managed_meetings").insert(row).select("*").maybeSingle();
+  if (error?.code === "23505" || (!error && !data)) return NextResponse.json({ error: "別の運営者が月例会を更新しました。再読み込みしてから保存してください。" }, { status: 409 });
+  if (error || !data) return NextResponse.json({ error: "月例会を保存できませんでした。" }, { status: 500 });
+  return NextResponse.json(meetingFromRow(data));
 }

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { Download, Eye, Plus, Save, Table2, Trash2, UserPlus } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { fetchManagedMembers } from "@/lib/data/member-overrides";
-import { fetchStoredParticipants, formatLocalUpdatedAt, participantStorageKey, saveAllParticipants, type StoredGuestEntry } from "@/lib/data/participant-storage";
+import { fetchStoredParticipants, formatLocalUpdatedAt, saveAllParticipants, type StoredGuestEntry, type StoredParticipants } from "@/lib/data/participant-storage";
 import { sortMembersForDirectory } from "@/lib/data/member-sort";
+import { csvCell } from "@/lib/data/csv-export";
 import type { Member, Participant, ParticipantStatus } from "@/types/domain";
 
 type MemberAttendanceStatus = Extract<ParticipantStatus, "参加" | "欠席" | "未定">;
@@ -39,10 +40,6 @@ function createInitialStatuses(members: Member[], initialParticipants: Participa
   return next;
 }
 
-function csvValue(value: string) {
-  return `"${value.replaceAll("\"", "\"\"")}"`;
-}
-
 export function ParticipantManager({
   meetingId,
   initialMembers,
@@ -52,9 +49,10 @@ export function ParticipantManager({
   initialMembers: Member[];
   initialParticipants: Participant[];
 }) {
-  const storageKey = participantStorageKey(meetingId);
+  const baseline = useRef<StoredParticipants>({});
+  const [isSaving, setIsSaving] = useState(false);
   const [members, setMembers] = useState<Member[]>(initialMembers);
-  const [statuses, setStatuses] = useState<Record<string, MemberAttendanceStatus>>(() => createInitialStatuses(initialMembers, initialParticipants));
+  const [statuses, setStatuses] = useState<Record<string, MemberAttendanceStatus>>(() => createInitialStatuses(initialMembers, []));
   const [guests, setGuests] = useState<GuestEntry[]>([]);
   const [isGuestFormOpen, setIsGuestFormOpen] = useState(false);
   const [isParticipantListOpen, setIsParticipantListOpen] = useState(false);
@@ -68,17 +66,21 @@ export function ParticipantManager({
   const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
-    void fetchManagedMembers(initialMembers).then(setMembers).catch(() => setMembers(initialMembers));
-  }, [initialMembers]);
-
-  useEffect(() => {
-    void fetchStoredParticipants(meetingId).then((saved) => {
-      setStatuses({ ...createInitialStatuses(members, initialParticipants), ...(saved?.statuses ?? {}) } as Record<string, MemberAttendanceStatus>);
-      if (Array.isArray(saved?.guests)) setGuests(saved.guests);
+    let active = true;
+    setIsReady(false);
+    Promise.all([fetchManagedMembers(initialMembers), fetchStoredParticipants(meetingId)]).then(([loadedMembers, saved]) => {
+      if (!active) return;
+      const nextStatuses = { ...createInitialStatuses(loadedMembers, []), ...saved?.statuses } as Record<string, MemberAttendanceStatus>;
+      Object.keys(nextStatuses).forEach(id => { if (!statusOptions.includes(nextStatuses[id])) nextStatuses[id] = "欠席"; });
+      baseline.current = { ...saved, statuses: nextStatuses, guests: saved?.guests ?? [] };
+      setMembers(loadedMembers);
+      setStatuses(nextStatuses);
+      setGuests(saved?.guests ?? []);
       setLastUpdatedAt(saved?.updatedAt);
       setIsReady(true);
-    });
-  }, [initialParticipants, meetingId, members, storageKey]);
+    }).catch(error => { if (active) setSavedMessage(error.message); });
+    return () => { active = false; };
+  }, [initialMembers, initialParticipants, meetingId]);
 
   const counts = useMemo(() => {
     return members.reduce(
@@ -95,30 +97,39 @@ export function ParticipantManager({
   const totalAttendees = attendingMembers.length + guests.length;
 
   function updateStatus(memberId: string, status: MemberAttendanceStatus) {
+    if (!isReady || isSaving) return;
     setStatuses((current) => ({ ...current, [memberId]: status }));
     setSavedMessage("");
   }
 
   async function saveParticipants() {
-    if (!isReady) return;
+    if (!isReady || isSaving) return;
+    setIsSaving(true);
     const updatedAt = new Date().toISOString();
     try {
-      const saved = await saveAllParticipants(meetingId, { statuses, guests, updatedAt });
+      const changedStatuses = Object.fromEntries(Object.entries(statuses).filter(([id, status]) => baseline.current.statuses?.[id] !== status));
+      const guestsChanged = JSON.stringify(guests) !== JSON.stringify(baseline.current.guests ?? []);
+      const saved = await saveAllParticipants(meetingId, { statuses: changedStatuses, ...(guestsChanged ? { guests, guestsUpdatedAt: baseline.current.guestsUpdatedAt } : {}), updatedAt });
+      const nextStatuses = { ...createInitialStatuses(members, []), ...saved.statuses } as Record<string, MemberAttendanceStatus>;
+      Object.keys(nextStatuses).forEach(id => { if (!statusOptions.includes(nextStatuses[id])) nextStatuses[id] = "欠席"; });
+      baseline.current = { ...saved, statuses: nextStatuses, guests: saved.guests ?? [] };
+      setStatuses(nextStatuses);
+      setGuests(saved.guests ?? []);
       setLastUpdatedAt(saved.updatedAt);
       setSavedMessage("参加者情報を保存しました。");
     } catch (error) {
       setSavedMessage(error instanceof Error ? error.message : "参加者情報を保存できませんでした。");
-    }
+    } finally { setIsSaving(false); }
   }
 
   function addGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!guestName.trim()) return;
+    if (!guestName.trim() || !isReady || isSaving) return;
 
     setGuests((current) => [
       ...current,
       {
-        id: `guest-${Date.now()}`,
+        id: `guest-${crypto.randomUUID()}`,
         name: guestName.trim(),
         company: guestCompany.trim(),
         industry: guestIndustry.trim(),
@@ -135,6 +146,12 @@ export function ParticipantManager({
     setSavedMessage("");
   }
 
+  function removeGuest(guestId: string) {
+    if (!isReady || isSaving) return;
+    setGuests((current) => current.filter((guest) => guest.id !== guestId));
+    setSavedMessage("");
+  }
+
   function exportCsv() {
     const memberRows = members.map((member) => [
       member.memberNo,
@@ -147,7 +164,7 @@ export function ParticipantManager({
     ]);
     const guestRows = guests.map((guest) => ["ゲスト", guest.name, guest.company, guest.industry, "参加", guest.type, guest.branchName]);
     const rows = [["会員番号", "名前", "会社名", "業種", "出欠", "種別", "支部名"], ...memberRows, ...guestRows];
-    const csv = rows.map((row) => row.map(csvValue).join(",")).join("\n");
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -158,7 +175,7 @@ export function ParticipantManager({
   }
 
   return (
-    <div className="space-y-5">
+    <fieldset disabled={!isReady || isSaving} className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-200 bg-white p-4 shadow-soft">
         <div>
           <p className="text-sm font-bold text-slate-500">最終更新</p>
@@ -169,10 +186,11 @@ export function ParticipantManager({
           <button
             type="button"
             onClick={saveParticipants}
+            disabled={!isReady || isSaving}
             className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white hover:bg-deep"
           >
             <Save size={16} />
-            保存
+            {isSaving ? "保存中…" : "保存"}
           </button>
           <Link
             href={`/admin/meetings/${meetingId}/table-assignments`}
@@ -265,6 +283,8 @@ export function ParticipantManager({
                 <p className="mt-1 text-xs font-bold text-slate-500">{member.industry}</p>
               </div>
               <select
+                disabled={!isReady || isSaving}
+                aria-label={`${member.name}の出欠`}
                 value={status}
                 onChange={(event) => updateStatus(member.id, event.target.value as MemberAttendanceStatus)}
                 className={`focus-ring rounded border px-3 py-2 text-sm font-bold ${statusSelectClasses[status]}`}
@@ -306,14 +326,14 @@ export function ParticipantManager({
                 company={guest.company || "会社名未入力"}
                 industry={guest.industry || "業種未入力"}
                 label={guest.type === "他支部" && guest.branchName ? `他支部: ${guest.branchName}` : guest.type}
-                onRemove={() => setGuests((current) => current.filter((item) => item.id !== guest.id))}
+                onRemove={() => removeGuest(guest.id)}
               />
             ))}
             {totalAttendees === 0 && <p className="text-sm font-bold text-slate-500">参加者はまだ選択されていません。</p>}
           </div>
         </div>
       )}
-    </div>
+    </fieldset>
   );
 }
 

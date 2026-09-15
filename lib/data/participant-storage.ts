@@ -17,6 +17,7 @@ export type StoredParticipants = {
   statuses?: Record<string, StoredParticipantStatus>;
   guests?: StoredGuestEntry[];
   updatedAt?: string;
+  guestsUpdatedAt?: string;
 };
 
 export const PARTICIPANT_UPDATED_EVENT = "nm-participants-updated";
@@ -39,19 +40,17 @@ export function readStoredParticipants(meetingId: string): StoredParticipants | 
 }
 
 export function writeStoredParticipants(meetingId: string, value: StoredParticipants) {
-  window.localStorage.setItem(participantStorageKey(meetingId), JSON.stringify(value));
+  try { window.localStorage.setItem(participantStorageKey(meetingId), JSON.stringify(value)); } catch { /* Cache is optional. */ }
   window.dispatchEvent(new CustomEvent(PARTICIPANT_UPDATED_EVENT, { detail: { meetingId } }));
 }
 
 export async function fetchStoredParticipants(meetingId: string): Promise<StoredParticipants | null> {
-  try {
+  {
     const response = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}/attendance`, { cache: "no-store" });
-    if (!response.ok) return readStoredParticipants(meetingId);
+    if (!response.ok) throw new Error(response.status === 401 ? "再度ログインしてください。" : "参加者情報を読み込めませんでした。再読み込みしてください。");
     const value = await response.json() as StoredParticipants;
-    window.localStorage.setItem(participantStorageKey(meetingId), JSON.stringify(value));
+    try { window.localStorage.setItem(participantStorageKey(meetingId), JSON.stringify(value)); } catch { /* Cache is optional. */ }
     return value;
-  } catch {
-    return readStoredParticipants(meetingId);
   }
 }
 
@@ -63,7 +62,7 @@ export async function saveMemberAttendance(meetingId: string, memberId: string, 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ memberId, status })
   });
-  if (!response.ok) throw new Error("出欠をサーバーへ保存できませんでした。時間をおいて再度お試しください。");
+  if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || "出欠を保存できませんでした。"); }
   const result = await response.json() as { updatedAt?: string };
   writeStoredParticipants(meetingId, { ...fallback, updatedAt: result.updatedAt ?? fallback.updatedAt });
   return result.updatedAt ?? fallback.updatedAt;
@@ -75,9 +74,9 @@ export async function saveAllParticipants(meetingId: string, value: StoredPartic
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(value)
   });
-  if (!response.ok) throw new Error("参加者情報をサーバーへ保存できませんでした。時間をおいて再度お試しください。");
-  const result = await response.json() as { updatedAt?: string };
-  const saved = { ...value, updatedAt: result.updatedAt ?? value.updatedAt ?? new Date().toISOString() };
+  if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || "参加者情報を保存できませんでした。"); }
+  await response.json();
+  const saved = await fetchStoredParticipants(meetingId) ?? value;
   writeStoredParticipants(meetingId, saved);
   return saved;
 }
@@ -99,12 +98,8 @@ export function subscribeStoredParticipants(meetingId: string, listener: () => v
 
 export function countMeetingAttendees(meetingId: string, members: Member[], initialParticipants: Participant[]) {
   const stored = readStoredParticipants(meetingId);
-  if (!stored?.statuses && !stored?.guests) {
-    return initialParticipants.filter((participant) => participant.status === "参加" || participant.status === "ゲスト").length;
-  }
-
-  const memberCount = members.filter((member) => stored.statuses?.[member.id] === "参加").length;
-  return memberCount + (stored.guests?.length ?? 0);
+  return storedParticipantsValueToParticipants(meetingId, members, initialParticipants, stored)
+    .filter((participant) => participant.status === "参加" || participant.status === "ゲスト").length;
 }
 
 export function storedParticipantsToParticipants(meetingId: string, members: Member[], initialParticipants: Participant[]) {
@@ -113,20 +108,17 @@ export function storedParticipantsToParticipants(meetingId: string, members: Mem
 }
 
 export function storedParticipantsValueToParticipants(meetingId: string, members: Member[], initialParticipants: Participant[], stored: StoredParticipants | null) {
-  if (!stored?.statuses && !stored?.guests) return initialParticipants;
+  if (stored === null) return initialParticipants.filter((participant) => participant.meetingId === meetingId);
 
   const memberParticipants = members.map<Participant>((member) => {
     const status = stored.statuses?.[member.id];
-    const initialStatus = initialParticipants.find((participant) => participant.memberId === member.id)?.status;
     return {
       id: `stored-${meetingId}-${member.id}`,
       meetingId,
       memberId: member.id,
-      status: status === "参加" || status === "欠席" || status === "未定"
+      status: status === "キャンセル" ? "欠席" : status === "参加" || status === "欠席" || status === "未定"
         ? status
-        : initialStatus === "参加" || initialStatus === "欠席" || initialStatus === "未定"
-          ? initialStatus
-          : "未定"
+        : "未定"
     };
   });
 
@@ -139,10 +131,7 @@ export function storedParticipantsValueToParticipants(meetingId: string, members
     status: "ゲスト"
   }));
 
-  const initialGuests = storedGuests === undefined
-    ? initialParticipants.filter((participant) => participant.status === "ゲスト")
-    : [];
-  return [...memberParticipants, ...guestParticipants, ...initialGuests];
+  return [...memberParticipants, ...guestParticipants];
 }
 
 export function formatLocalUpdatedAt(value?: string) {

@@ -2,7 +2,8 @@ import Image from "next/image";
 import { MemberDirectory } from "@/components/members/member-directory";
 import { members } from "@/lib/data/mock";
 
-export default function MembersPage({ searchParams }: { searchParams: { q?: string; major?: string; role?: string } }) {
+export default async function MembersPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ q?: string; major?: string; role?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const q = searchParams.q?.trim() ?? "";
   const major = searchParams.major ?? "";
   const role = searchParams.role ?? "";

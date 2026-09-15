@@ -1,8 +1,10 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, FileText, Save } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AssignmentSeat, AssignmentTable } from "@/types/domain";
+import { csvCell } from "@/lib/data/csv-export";
+import { compactTableAssignment } from "@/lib/table-assignment/snapshot";
 
 function seatKey(seat: AssignmentSeat, index: number) {
   return seat.member?.id ?? `${seat.guestName ?? "guest"}-${index}`;
@@ -43,6 +45,8 @@ export function EditableTableAssignment({
   score,
   warnings,
   storageKey,
+  restoreDraft = true,
+  savedAt,
   helperText,
   onSave
 }: {
@@ -50,21 +54,37 @@ export function EditableTableAssignment({
   score?: number;
   warnings?: string[];
   storageKey: string;
+  restoreDraft?: boolean;
+  savedAt?: string;
   helperText?: string;
-  onSave?: (tables: AssignmentTable[], updatedAt: string) => void;
+  onSave?: (tables: AssignmentTable[], updatedAt: string) => void | Promise<void>;
 }) {
-  const [tables, setTables] = useState<AssignmentTable[]>(() => sortTables(initialTables));
+  const [tables, setTables] = useState<AssignmentTable[]>(() => {
+    if (restoreDraft && typeof window !== "undefined") {
+      try {
+        const draft = JSON.parse(window.localStorage.getItem(storageKey) ?? "null");
+        if (draft && Array.isArray(draft.tables) && (!savedAt || draft.updatedAt > savedAt)) return sortTables(draft.tables);
+      } catch { /* A missing or invalid local draft does not prevent editing. */ }
+    }
+    return sortTables(initialTables);
+  });
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const edited = useRef(false);
 
   const tableNames = useMemo(() => tables.map((table) => table.tableName), [tables]);
 
   useEffect(() => {
-    setTables(sortTables(initialTables));
-    setSaved(false);
-  }, [initialTables]);
+    if (!edited.current) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify({ tables: compactTableAssignment(tables), updatedAt: new Date().toISOString() }));
+    } catch { setError("この端末へ作業途中の内容を保存できません。画面を閉じる前に「保存」を押してください。"); }
+  }, [tables, storageKey]);
 
   function moveSeat(fromTableName: string, seatIndex: number, toTableName: string) {
     if (fromTableName === toTableName) return;
+    edited.current = true;
     setSaved(false);
     setTables((current) => {
       const next = current.map((table) => ({ ...table, seats: [...table.seats] }));
@@ -78,6 +98,7 @@ export function EditableTableAssignment({
   }
 
   function reorderSeat(tableName: string, seatIndex: number, delta: number) {
+    edited.current = true;
     setSaved(false);
     setTables((current) => {
       const next = current.map((table) => ({ ...table, seats: [...table.seats] }));
@@ -90,11 +111,18 @@ export function EditableTableAssignment({
     });
   }
 
-  function saveTables() {
+  async function saveTables() {
+    if (saving) return;
+    setSaving(true);
+    setError("");
     const updatedAt = new Date().toISOString();
-    window.localStorage.setItem(storageKey, JSON.stringify({ tables, updatedAt }));
-    onSave?.(tables, updatedAt);
-    setSaved(true);
+    try {
+      await onSave?.(tables, updatedAt);
+      try { window.localStorage.setItem(storageKey, JSON.stringify({ tables: compactTableAssignment(tables), updatedAt })); } catch { /* Server save succeeded. */ }
+      setSaved(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "保存できませんでした。もう一度お試しください。");
+    } finally { setSaving(false); }
   }
 
   function exportCsv() {
@@ -110,7 +138,7 @@ export function EditableTableAssignment({
         ]);
       });
     });
-    const csv = rows.map((row) => row.map((value) => `"${value.replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -313,14 +341,15 @@ export function EditableTableAssignment({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-200 bg-white p-4">
         <div>
           <p className="text-sm font-bold text-slate-500">最適化スコア</p>
-          <p className="text-2xl font-black text-deep">{score ?? "-"}</p>
+          <p className="text-2xl font-black text-deep">{edited.current ? "手動調整中" : score ?? "-"}</p>
           {helperText && <p className="mt-1 text-sm text-slate-600">{helperText}</p>}
           {saved && <p className="mt-2 text-sm font-bold text-forest">保存しました。</p>}
+          {error && <p role="alert" className="mt-2 text-sm font-bold text-red-700">{error}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={saveTables} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white">
+          <button type="button" onClick={saveTables} disabled={saving || !tables.some((table) => table.seats.length)} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
             <Save size={16} />
-            保存
+            {saving ? "保存中…" : "保存"}
           </button>
           <button type="button" onClick={exportPdf} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-200 px-4 py-2 text-sm font-bold">
             <FileText size={16} />
@@ -332,7 +361,7 @@ export function EditableTableAssignment({
           </button>
         </div>
       </div>
-      {warnings && warnings.length > 0 && (
+      {!edited.current && warnings && warnings.length > 0 && (
         <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="mb-2 flex items-center gap-2 font-bold"><AlertTriangle size={18} />条件違反の警告</div>
           <ul className="grid gap-1">
@@ -340,7 +369,7 @@ export function EditableTableAssignment({
           </ul>
         </div>
       )}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <fieldset disabled={saving} className="grid gap-4 lg:grid-cols-2">
         {tables.map((table) => (
           <article key={table.tableName} className="rounded border border-slate-200 bg-white p-5 shadow-soft">
             <div className="mb-4 flex items-center justify-between">
@@ -365,7 +394,7 @@ export function EditableTableAssignment({
                       <ArrowDown size={15} />
                     </button>
                     <select
-                      defaultValue={table.tableName}
+                      value={table.tableName}
                       onChange={(event) => moveSeat(table.tableName, index, event.target.value)}
                       className="focus-ring rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold"
                     >
@@ -377,7 +406,7 @@ export function EditableTableAssignment({
             </div>
           </article>
         ))}
-      </div>
+      </fieldset>
     </div>
   );
 }
