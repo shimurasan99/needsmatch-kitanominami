@@ -1,0 +1,76 @@
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const Module = require('node:module');
+const ts = require('typescript');
+const React = require('react');
+const { create, act } = require('react-test-renderer');
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const meeting = id => ({ id, date: '2099-09-20', title: id, status: '確定', venueName: '旧会場' });
+function deferred() { let resolve; let reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
+function setup() {
+  const win = new Map(), doc = new Map(), timers = new Map();
+  global.window = { addEventListener: (k, v) => win.set(k, v), removeEventListener: k => win.delete(k), setInterval: (fn, ms) => { assert.equal(ms, 30000); timers.set(1, fn); return 1; }, clearInterval: id => timers.delete(id) };
+  global.document = { visibilityState: 'visible', addEventListener: (k, v) => doc.set(k, v), removeEventListener: k => doc.delete(k) };
+  const state = { meetings: [meeting('a'), meeting('b')], members: [{ id: 'one' }], calls: 0, next: null };
+  function Form(props) { const [draft, setDraft] = React.useState('未定'); return React.createElement('input', { value: draft, onChange: e => setDraft(e.target.value), 'data-meeting': props.meeting.id, 'data-members': props.members.map(m => m.id).join(',') }); }
+  const mocks = { '@/components/member/attendance-form': { AttendanceForm: Form }, '@/lib/data/meeting-storage': { fetchMeetings: () => { state.calls++; return state.next ? state.next.promise : Promise.resolve(state.meetings); } }, '@/lib/data/member-overrides': { fetchManagedMembers: async () => state.members } };
+  const filename = path.join(__dirname, '../components/member/attendance-page-client.tsx');
+  const mod = new Module(filename, module); mod.paths = module.paths; mod.require = id => mocks[id] ?? require(id);
+  mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, filename);
+  return { state, win, doc, timers, Page: mod.exports.AttendancePageClient, props: { initialMeetings: state.meetings, members: state.members } };
+}
+test('focus, visible and polling refresh metadata without resetting selected meeting or unsaved answer; errors retain form', async () => {
+  const h = setup(); let r;
+  await act(async () => { r = create(React.createElement(h.Page, h.props)); });
+  await act(async () => r.root.findByType('select').props.onChange({ target: { value: 'b' } }));
+  await act(async () => r.root.findByType('input').props.onChange({ target: { value: '参加' } }));
+  h.state.members = [{ id: 'one' }, { id: 'new' }];
+  h.state.meetings = [meeting('a'), { ...meeting('b'), venueName: '新会場' }];
+  await act(async () => h.win.get('focus')());
+  assert.equal(r.root.findByType('input').props['data-members'], 'one,new');
+  assert.equal(r.root.findByType('input').props.value, '参加');
+  assert.equal(r.root.findByType('select').props.value, 'b');
+  assert.match(JSON.stringify(r.toJSON()), /新会場/);
+  h.state.next = deferred();
+  await act(async () => { h.win.get('focus')(); h.doc.get('visibilitychange')(); h.timers.get(1)(); });
+  assert.equal(h.state.calls, 3, 'overlapping events make only one request');
+  await act(async () => h.state.next.reject(new Error('temporary network error')));
+  assert.equal(r.root.findByType('input').props.value, '参加');
+  assert.equal(r.root.findAllByProps({ role: 'alert' }).length, 1);
+  h.state.next = null;
+  document.visibilityState = 'hidden';
+  await act(async () => { h.doc.get('visibilitychange')(); h.timers.get(1)(); });
+  assert.equal(h.state.calls, 3);
+  document.visibilityState = 'visible';
+  await act(async () => h.doc.get('visibilitychange')());
+  await act(async () => h.timers.get(1)());
+  assert.equal(h.state.calls, 5);
+  assert.equal(r.root.findAllByProps({ role: 'alert' }).length, 0);
+  assert.equal(r.root.findByType('input').props.value, '参加');
+  await act(async () => r.unmount());
+  assert.equal(h.win.size + h.doc.size + h.timers.size, 0);
+});
+test('late results from replaced effect and unmount cannot overwrite newer data; initial failure can recover', async () => {
+  const h = setup(); h.state.next = deferred(); const stale = h.state.next; let r;
+  await act(async () => { r = create(React.createElement(h.Page, h.props)); });
+  h.state.next = null; h.state.meetings = [{ ...meeting('b'), venueName: '最新会場' }];
+  await act(async () => r.update(React.createElement(h.Page, { ...h.props, initialMeetings: [...h.props.initialMeetings] })));
+  await act(async () => stale.resolve([meeting('a')]));
+  assert.equal(r.root.findByType('select').props.value, 'b');
+  assert.match(JSON.stringify(r.toJSON()), /最新会場/);
+  h.state.next = deferred();
+  await act(async () => h.win.get('focus')());
+  await act(async () => r.unmount());
+  await act(async () => h.state.next.resolve([meeting('a')]));
+  assert.equal(h.win.size + h.doc.size + h.timers.size, 0);
+  const retry = setup(); retry.state.next = deferred();
+  await act(async () => { r = create(React.createElement(retry.Page, retry.props)); });
+  await act(async () => retry.state.next.reject(new Error('offline')));
+  assert.equal(r.root.findAllByType('input').length, 0);
+  retry.state.next = null;
+  await act(async () => retry.win.get('focus')());
+  assert.equal(r.root.findAllByType('input').length, 1);
+  await act(async () => r.unmount());
+});

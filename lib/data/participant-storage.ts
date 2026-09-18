@@ -66,7 +66,12 @@ export async function saveMemberAttendance(meetingId: string, memberId: string, 
   if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || "出欠を保存できませんでした。"); }
   const committed = await response.json() as StoredParticipants;
   if (committed.statuses?.[memberId] !== status || !committed.versions?.[memberId]) throw new Error("保存結果を確認できませんでした。最新の出欠を確認してください。");
-  const saved = await fetchStoredParticipants(meetingId);
+  let saved: StoredParticipants | null;
+  try {
+    saved = await fetchStoredParticipants(meetingId);
+  } catch {
+    throw new Error("出欠の保存は受け付けられましたが、保存後の確認通信に失敗しました。保存済みの可能性があるため、「保存済みの最新の回答を読み込む」で確認してから操作してください。");
+  }
   if (!saved || saved.statuses?.[memberId] !== status) {
     throw new Error("保存後の出欠を確認できませんでした。他の画面で更新された可能性があります。最新の内容を読み込んで、もう一度確認してください。");
   }

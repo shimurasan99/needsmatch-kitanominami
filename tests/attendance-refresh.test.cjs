@@ -17,11 +17,103 @@ function load(relative, mocks = {}) {
 }
 function browser() {
   const events = new Map(), cache = new Map();
-  global.window = { addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name), setInterval: () => 1, clearInterval() {}, dispatchEvent() {}, localStorage: { getItem: key => cache.get(key), setItem: (key, value) => cache.set(key, value) } };
+  let interval;
+  global.window = { addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name), setInterval: (fn, delay) => { assert.equal(delay, 30000); interval = fn; return 1; }, clearInterval() {}, dispatchEvent() {}, localStorage: { getItem: key => cache.get(key), setItem: (key, value) => cache.set(key, value) } };
   global.document = { visibilityState: 'visible', addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) };
-  return { focus: () => events.get('focus')?.(), visible: () => events.get('visibilitychange')?.(), cache };
+  return { focus: () => events.get('focus')?.(), visible: () => events.get('visibilitychange')?.(), tick: () => interval?.(), cache };
 }
 const members = [{ id: 'a', name: 'A', memberNo: '1', industry: '', company: '' }, { id: 'b', name: 'B', memberNo: '2', industry: '', company: '' }];
+
+test('remote revision replaces obsolete success message only when selected answer is clean', async () => {
+  const state = browser();
+  let remote = { statuses: { a: '未定' }, versions: { a: 'v1' } };
+  let fail = false;
+  const { AttendanceForm } = load('components/member/attendance-form.tsx', {
+    '@/lib/data/member-sort': { sortMembersForDirectory: value => value },
+    '@/lib/data/participant-storage': { fetchStoredParticipants: async () => remote, saveMemberAttendance: async () => { if (fail) throw new Error('競合エラー保持'); remote = { statuses: { a: '参加' }, versions: { a: 'v2' } }; return remote; } }
+  });
+  let r;
+  await act(async () => { r = create(React.createElement(AttendanceForm, { meeting: { id: 'm' }, members })); });
+  const radio = value => r.root.findAllByType('input').find(input => input.props.value === value);
+  await act(async () => r.root.findByType('select').props.onChange({ target: { value: 'a' } }));
+  await act(async () => radio('参加').props.onChange());
+  await act(async () => r.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  await act(async () => state.tick());
+  assert.match(JSON.stringify(r.toJSON()), /保存し、反映を確認しました/);
+  assert.doesNotMatch(JSON.stringify(r.toJSON()), /別の画面から/);
+  remote = { statuses: { a: '欠席' }, versions: { a: 'v3' } };
+  await act(async () => state.tick());
+  assert.equal(radio('欠席').props.checked, true);
+  assert.match(JSON.stringify(r.toJSON()), /別の画面から更新された最新の回答/);
+  assert.doesNotMatch(JSON.stringify(r.toJSON()), /保存し、反映を確認しました/);
+  await act(async () => radio('未定').props.onChange());
+  fail = true;
+  await act(async () => r.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  remote = { statuses: { a: '参加' }, versions: { a: 'v4' } };
+  await act(async () => state.tick());
+  assert.equal(radio('未定').props.checked, true);
+  assert.match(JSON.stringify(r.toJSON()), /競合エラー保持/);
+  assert.doesNotMatch(JSON.stringify(r.toJSON()), /別の画面から/);
+  await act(async () => r.unmount());
+});
+
+test('30 second refresh preserves dirty choice; explicit reload confirms discard, locks operations and keeps draft on failure', async () => {
+  const state = browser();
+  let remote = { statuses: { a: '未定' }, versions: { a: 'v1' } };
+  let fail = false, resolveRead, held = false, reads = 0, writes = 0, sentVersion;
+  const { AttendanceForm } = load('components/member/attendance-form.tsx', {
+    '@/lib/data/member-sort': { sortMembersForDirectory: value => value },
+    '@/lib/data/participant-storage': {
+      fetchStoredParticipants: async () => { reads++; if (fail) throw new Error('通信エラー'); if (held) return new Promise(resolve => { resolveRead = resolve; }); return remote; },
+      saveMemberAttendance: async (_, __, ___, version) => { writes++; sentVersion = version; throw new Error('更新が競合しました'); }
+    }
+  });
+  let r;
+  await act(async () => { r = create(React.createElement(AttendanceForm, { meeting: { id: 'm' }, members })); });
+  const radio = value => r.root.findAllByType('input').find(input => input.props.value === value);
+  const reload = () => r.root.findAllByType('button').find(button => button.props.type === 'button');
+  await act(async () => r.root.findByType('select').props.onChange({ target: { value: 'a' } }));
+  remote = { statuses: { a: '参加' }, versions: { a: 'v2' } };
+  await act(async () => state.tick());
+  assert.equal(radio('参加').props.checked, true);
+  await act(async () => radio('欠席').props.onChange());
+  remote = { statuses: { a: '未定' }, versions: { a: 'v3' } };
+  await act(async () => state.tick());
+  assert.equal(radio('欠席').props.checked, true);
+  await act(async () => r.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  assert.equal(sentVersion, 'v2');
+  assert.match(r.root.findByProps({ role: 'alert' }).children.filter(child => typeof child === 'string').join(''), /競合/);
+  const confirm = () => r.root.findByProps({ role: 'alertdialog' }).findAllByType('button')[1];
+  const before = reads;
+  await act(async () => reload().props.onClick());
+  assert.equal(r.root.findByType('select').props.disabled, true);
+  assert.equal(r.root.findByType('fieldset').props.disabled, true);
+  await act(async () => { state.tick(); void r.root.findByType('form').props.onSubmit({ preventDefault() {} }); });
+  await act(async () => r.root.findByProps({ role: 'alertdialog' }).findAllByType('button')[0].props.onClick());
+  assert.equal(reads, before);
+  assert.equal(radio('欠席').props.checked, true);
+  fail = true;
+  await act(async () => reload().props.onClick());
+  await act(async () => confirm().props.onClick());
+  assert.equal(radio('欠席').props.checked, true);
+  assert.match(JSON.stringify(r.toJSON()), /通信エラー/);
+  fail = false; held = true;
+  let pending;
+  await act(async () => reload().props.onClick());
+  const callback = confirm().props.onClick;
+  const readsBefore = reads;
+  await act(async () => { pending = callback(); void callback(); void r.root.findByType('form').props.onSubmit({ preventDefault() {} }); state.tick(); });
+  assert.equal(reads, readsBefore + 1);
+  assert.equal(writes, 1);
+  assert.equal(reload().props.disabled, true);
+  await act(async () => { resolveRead(remote); await pending; });
+  assert.equal(radio('未定').props.checked, true);
+  assert.equal(r.root.findAllByProps({ role: 'alert' }).length, 0);
+  await act(async () => radio('参加').props.onChange());
+  await act(async () => r.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+  assert.equal(sentVersion, 'v3');
+  await act(async () => r.unmount());
+});
 
 test('server attendance cache never overwrites or restores legacy browser answers', async () => {
   const { cache } = browser();
