@@ -32,7 +32,7 @@ export function AdminDashboard({ initialMembers, initialMeetings }: { initialMem
         setData({
           memberCount: members.filter((member) => member.status === "在籍").length,
           meetingCount: upcoming.length,
-          attendeeCount: members.filter((member) => attendance?.statuses?.[member.id] === "参加").length + (attendance?.guests?.length ?? 0),
+          attendeeCount: members.filter((member) => attendance?.statuses?.[member.id] === "参加").length + (attendance?.guests?.filter((guest) => guest.status !== "欠席").length ?? 0),
           nextMeeting
         });
       } catch (cause) {

@@ -5,6 +5,7 @@ import type { Member, Participant, ParticipantStatus } from "@/types/domain";
 export type StoredParticipantStatus = Extract<ParticipantStatus, "参加" | "欠席" | "未定"> | "キャンセル";
 
 export type StoredGuestEntry = {
+  status?: "参加" | "欠席";
   id: string;
   name: string;
   company: string;
@@ -144,7 +145,7 @@ export function storedParticipantsValueToParticipants(meetingId: string, members
     meetingId,
     guestName: guest.name,
     guestCompany: guest.company || guest.branchName || guest.type,
-    status: "ゲスト"
+    status: guest.status === "欠席" ? "欠席" : "ゲスト"
   }));
 
   return [...memberParticipants, ...guestParticipants];

@@ -10,8 +10,9 @@ import { fetchMeetings } from "@/lib/data/meeting-storage";
 import { generateTableAssignment } from "@/lib/table-assignment/generator";
 import { compactTableAssignment } from "@/lib/table-assignment/snapshot";
 import { reconcileTableMembers } from "@/lib/table-assignment/member-identity";
+import { markSeatAbsent } from "@/lib/table-assignment/manual-absence";
 import { preserveTableDraft, readTableRecoveryCandidates, type TableRecoveryCandidate } from "@/lib/data/table-assignment-recovery";
-import type { AssignmentTable, Meeting, Member, Participant } from "@/types/domain";
+import type { AssignmentSeat, AssignmentTable, Meeting, Member, Participant } from "@/types/domain";
 
 function assignmentHistory(meetingId: string, meetings: Meeting[], drafts: Record<string, SavedTableAssignment>, published: Record<string, { tables: AssignmentTable[]; publishedAt: string }>, members: Member[]) {
   const current = meetings.find((meeting) => meeting.id === meetingId);
@@ -183,6 +184,24 @@ export function TableAssignmentManager({
     } finally { if (run === lifetime.current) { operation.current = false; setBusy(false); } }
   }
 
+  async function markAbsent(seat: AssignmentSeat) {
+    if (!ready || operation.current) throw new Error("処理中です。完了後にもう一度お試しください。");
+    operation.current = true;
+    setBusy(true);
+    const run = lifetime.current;
+    participantRequest.current++;
+    try {
+      const nextMembers = await fetchManagedMembers(initialData.current.initialMembers);
+      if (run !== lifetime.current) throw new Error("画面が切り替わりました。最新の出欠をご確認ください。");
+      const result = await markSeatAbsent(meetingId, seat, nextMembers);
+      if (run !== lifetime.current) throw new Error("画面が切り替わりました。最新の出欠をご確認ください。");
+      setMembers(nextMembers);
+      setStoredParticipants(result.participants);
+      setParticipantVersion((current) => current + 1);
+      return { attendanceUpdated: result.attendanceUpdated };
+    } finally { if (run === lifetime.current) { operation.current = false; setBusy(false); } }
+  }
+
   async function generateTables(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!ready || operation.current) return;
@@ -277,7 +296,7 @@ export function TableAssignmentManager({
             <button
               type="button"
               onClick={publishCurrentTables}
-              disabled={!currentAssignment?.tables.some((table) => table.seats.length) || busy || !ready}
+              disabled={!currentAssignment?.tables.length || busy || !ready}
               className="focus-ring inline-flex items-center gap-2 rounded bg-accent px-4 py-2 text-sm font-bold text-white shadow-soft hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send size={16} />
@@ -332,6 +351,7 @@ export function TableAssignmentManager({
         participantStatuses={storedParticipants?.statuses ?? {}}
         seatsPerTable={seatsPerTable}
         onRefreshMembers={refreshAdditionMembers}
+        onMarkAbsent={markAbsent}
       /></fieldset>}
     </div>
   );

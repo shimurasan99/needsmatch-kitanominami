@@ -10,6 +10,7 @@ const Module = require('node:module');
 const ts = require('typescript');
 const { NextRequest } = require('next/server');
 const { saveAttendance } = require('./attendance-rpc-fixture.cjs');
+const { publishTableAssignment } = require('./publication-rpc-fixture.cjs');
 
 process.env.AUTH_SESSION_SECRET = 'integration-test-only-session-secret-not-used-outside-tests';
 process.env.ADMIN_SHARED_PASSWORD = 'integration-admin-password';
@@ -32,7 +33,10 @@ class Database {
   constructor() { this.tables = new Map(); this.failure = null; }
   from(table) { if (!this.tables.has(table)) this.tables.set(table, []); return new Query(this, table); }
   rows(table) { return structuredClone(this.tables.get(table) ?? []); }
-  async rpc(name, args) { assert.equal(name, 'save_attendance_atomic'); return saveAttendance(this.tables, args, this.failAttendanceAfterStatuses); }
+  async rpc(name, args) {
+    if (name === 'publish_table_assignment') return publishTableAssignment(this.tables, args);
+    assert.equal(name, 'save_attendance_atomic'); return saveAttendance(this.tables, args, this.failAttendanceAfterStatuses);
+  }
 }
 class Query {
   constructor(database, table) { this.database = database; this.table = table; this.action = 'read'; this.filters = []; }
@@ -78,6 +82,7 @@ function routes(database) {
     meetings: load('app/api/meetings/route.ts', mocks),
     meeting: load('app/api/meetings/[id]/route.ts', mocks),
     attendance: load('app/api/meetings/[id]/attendance/route.ts', mocks),
+    publication: load('app/api/meetings/[id]/table-assignment-publication/route.ts', mocks),
     login: load('app/api/login/route.ts', mocks)
   };
 }
@@ -98,6 +103,54 @@ async function adminCookie(login) {
   return response.headers.get('set-cookie').split(';')[0];
 }
 const fixtureMeeting = { id: 'september', title: '9月定例会', date: '2026-09-20', startTime: '18:00', endTime: '20:00', venueName: '会場', venueAddress: '東京都', note: '', applicationDeadline: '2026-09-18', status: '確定' };
+
+test('saved empty-seat tables publish after the final absence, preserving history and CAS protections', async () => {
+  const db = new Database();
+  const revision = '2026-09-18T01:00:00.000Z';
+  const tables = [{ tableName: 'Aテーブル', seats: [] }, { tableName: 'Bテーブル', seats: [] }];
+  const history = { july: { tables: [{ tableName: 'A', seats: [{ guest: { name: 'July guest' } }] }], publishedAt: revision }, august: { tables: [], publishedAt: revision } };
+  db.tables.set('shared_site_state', [
+    { state_key: 'table-assignment-drafts', payload: { september: { tables, updatedAt: revision } }, updated_at: revision },
+    { state_key: 'table-assignments', payload: structuredClone(history), updated_at: revision }
+  ]);
+  const { publication, state, login } = routes(db);
+  const admin = await adminCookie(login);
+  const member = `nm_member_auth=${await auth.createSessionToken('member')}`;
+  const params = { params: Promise.resolve({ id: 'september' }) };
+  const body = { expectedSavedRevision: revision, expectedPublishedRevision: null };
+  for (const cookie of [undefined, member]) assert.equal((await publication.POST(request('POST', body, cookie), params)).status, 401);
+  const beforeDraft = db.rows('shared_site_state')[0];
+  const response = await publication.POST(request('POST', body, admin), params);
+  assert.equal(response.status, 200);
+  const saved = await response.json();
+  assert.deepEqual(saved.publication.tables, tables);
+  const shared = await (await state.GET(request('GET', undefined, member), { params: Promise.resolve({ key: 'table-assignments' }) })).json();
+  assert.deepEqual(shared.payload.september, saved.publication);
+  assert.deepEqual(shared.payload.july, history.july);
+  assert.deepEqual(shared.payload.august, history.august);
+  assert.deepEqual(db.rows('shared_site_state')[0], beforeDraft);
+  const published = db.rows('shared_site_state');
+  assert.equal((await publication.POST(request('POST', body, admin), params)).status, 409);
+  assert.equal((await publication.POST(request('POST', { ...body, expectedSavedRevision: '2026-09-17T00:00:00.000Z', expectedPublishedRevision: saved.publication.publishedAt }, admin), params)).status, 409);
+  assert.deepEqual(db.rows('shared_site_state'), published);
+});
+
+test('publication rejects zero tables and malformed table seat arrays without changing history', async () => {
+  const revision = '2026-09-18T01:00:00.000Z';
+  const admin = `nm_admin_auth=${await auth.createSessionToken('admin')}`;
+  for (const tables of [undefined, null, {}, [], [null], [{}], [{ seats: null }], [{ seats: [] }, { seats: 'invalid' }]]) {
+    const db = new Database();
+    db.tables.set('shared_site_state', [
+      { state_key: 'table-assignment-drafts', payload: { september: { tables, updatedAt: revision } }, updated_at: revision },
+      { state_key: 'table-assignments', payload: { july: { tables: [], publishedAt: revision } }, updated_at: revision }
+    ]);
+    const before = db.rows('shared_site_state');
+    const { publication } = routes(db);
+    const response = await publication.POST(request('POST', { expectedSavedRevision: revision, expectedPublishedRevision: null }, admin), { params: Promise.resolve({ id: 'september' }) });
+    assert.equal(response.status, 400, JSON.stringify(tables));
+    assert.deepEqual(db.rows('shared_site_state'), before);
+  }
+});
 
 test('two separately logged-in admins can create/update shared records; stale writers cannot erase newer data', async () => {
   const db = new Database();

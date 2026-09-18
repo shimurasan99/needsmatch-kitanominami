@@ -55,6 +55,7 @@ export async function PUT(request: NextRequest, { params: paramsPromise }: { par
   if (memberWrite && body.guests !== undefined) return NextResponse.json({ error: "管理者画面からゲストを編集してください。" }, { status: 403 });
   if (body.guests !== undefined) {
     if (!Array.isArray(body.guests) || body.guests.some(guest => !guest?.id || typeof guest.name !== "string" || !guest.name.trim())) return NextResponse.json({ error: "ゲスト名を確認してください。" }, { status: 400 });
+    if (body.guests.some(guest => guest.status !== undefined && guest.status !== "参加" && guest.status !== "欠席")) return NextResponse.json({ error: "ゲストの出欠は参加または欠席を選択してください。" }, { status: 400 });
     if (!Object.hasOwn(body, "guestsUpdatedAt")) return NextResponse.json({ error: "ゲスト情報を再読み込みしてから保存してください。" }, { status: 428 });
   }
   const { data, error } = await supabase.rpc("save_attendance_atomic", {

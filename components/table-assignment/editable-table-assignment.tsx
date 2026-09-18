@@ -6,6 +6,7 @@ import type { AssignmentSeat, AssignmentTable, Member } from "@/types/domain";
 import { csvCell } from "@/lib/data/csv-export";
 import { compactTableAssignment } from "@/lib/table-assignment/snapshot";
 import { addEmptyTable, addGuestToTable, addMemberToTable, getUnassignedMembers, nextTableName } from "@/lib/table-assignment/manual-addition";
+import { removeSeatFromTable } from "@/lib/table-assignment/manual-absence";
 
 function seatKey(seat: AssignmentSeat, index: number) {
   return seat.member?.id ?? `${seat.guestName ?? "guest"}-${index}`;
@@ -53,7 +54,8 @@ export function EditableTableAssignment({
   members = [],
   participantStatuses = {},
   seatsPerTable,
-  onRefreshMembers
+  onRefreshMembers,
+  onMarkAbsent
 }: {
   initialTables: AssignmentTable[];
   score?: number;
@@ -67,6 +69,7 @@ export function EditableTableAssignment({
   participantStatuses?: Record<string, string>;
   seatsPerTable?: number;
   onRefreshMembers?: () => Promise<void>;
+  onMarkAbsent?: (seat: AssignmentSeat) => Promise<{ attendanceUpdated: boolean }>;
 }) {
   const [tables, setTables] = useState<AssignmentTable[]>(() => {
     if (restoreDraft && typeof window !== "undefined") {
@@ -96,6 +99,47 @@ export function EditableTableAssignment({
   const [manualError, setManualError] = useState("");
   const [recentGuest, setRecentGuest] = useState<{ name: string; company: string } | null>(null);
   const [recentTable, setRecentTable] = useState<string | null>(null);
+  const [absenceTarget, setAbsenceTarget] = useState<{ tableName: string; index: number; seat: AssignmentSeat } | null>(null);
+  const [markingAbsent, setMarkingAbsent] = useState(false);
+  const [absenceError, setAbsenceError] = useState("");
+  const [absenceMessage, setAbsenceMessage] = useState("");
+  const absenceRef = useRef(false);
+  const absenceDialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (!absenceTarget) return;
+    const dialog = absenceDialogRef.current;
+    if (!dialog) return;
+    dialog.showModal();
+    dialog.querySelector?.<HTMLButtonElement>("[data-absence-cancel]")?.focus();
+    return () => dialog.close();
+  }, [absenceTarget]);
+
+  async function confirmAbsence() {
+    if (!absenceTarget || !onMarkAbsent || absenceRef.current || savingRef.current || refreshingRef.current) return;
+    absenceRef.current = true;
+    setMarkingAbsent(true);
+    setAbsenceError("");
+    try {
+      const next = removeSeatFromTable(tables, absenceTarget.tableName, absenceTarget.index, absenceTarget.seat);
+      const result = await onMarkAbsent(absenceTarget.seat);
+      const name = printableSeatName(absenceTarget.seat);
+      edited.current = true;
+      setTables(next);
+      setSaved(false);
+      setError("");
+      setRecentAddition(null);
+      setRecentGuest(null);
+      setAdditionMessage("");
+      setManualMessage("");
+      setAbsenceMessage(result.attendanceUpdated
+        ? `${name}さんの出欠を「欠席」で保存し、編集中の配置から外しました。他の配置は変更していません。テーブル割りはまだ未保存です。「保存」→「保存済みの内容を公開する」を押してください。`
+        : `${name}さんを編集中の配置から外しました。参加者名簿に一致するゲスト登録がないため、出欠回答は変更していません。他の配置はそのままです。「保存」→「保存済みの内容を公開する」を押してください。`);
+      setAbsenceTarget(null);
+    } catch (cause) {
+      setAbsenceError(`${cause instanceof Error ? cause.message : "欠席に変更できませんでした。"} 配置は保持しています。出欠は保存済みの場合があるため、最新の出欠を確認してから再実行してください。`);
+    } finally { absenceRef.current = false; setMarkingAbsent(false); }
+  }
 
   const tableNames = useMemo(() => tables.map((table) => table.tableName), [tables]);
   const unassignedMembers = useMemo(() => getUnassignedMembers(tables, members), [tables, members]);
@@ -109,6 +153,7 @@ export function EditableTableAssignment({
   useEffect(() => { addingRef.current = false; }, [tables]);
 
   function addTable() {
+    if (absenceRef.current) return;
     if (savingRef.current || refreshingRef.current || addingRef.current) return;
     addingRef.current = true;
     try {
@@ -130,6 +175,7 @@ export function EditableTableAssignment({
   }
 
   function addGuest() {
+    if (absenceRef.current) return;
     if (savingRef.current || refreshingRef.current || addingRef.current) return;
     addingRef.current = true;
     try {
@@ -150,6 +196,7 @@ export function EditableTableAssignment({
   }
 
   function undoRecentGuest() {
+    if (absenceRef.current) return;
     if (!recentGuest || savingRef.current || refreshingRef.current || addingRef.current) return;
     edited.current = true;
     setSaved(false);
@@ -160,6 +207,7 @@ export function EditableTableAssignment({
   }
 
   function undoRecentTable() {
+    if (absenceRef.current) return;
     if (!canUndoTable || savingRef.current || refreshingRef.current || addingRef.current) return;
     edited.current = true;
     setSaved(false);
@@ -170,6 +218,7 @@ export function EditableTableAssignment({
   }
 
   function addSelectedMember() {
+    if (absenceRef.current) return;
     if (savingRef.current || refreshingRef.current || addingRef.current || !selectedMember || !selectedTable) return;
     addingRef.current = true;
     try {
@@ -188,6 +237,7 @@ export function EditableTableAssignment({
   }
 
   function undoRecentAddition() {
+    if (absenceRef.current) return;
     if (!recentAddition || savingRef.current || refreshingRef.current || addingRef.current) return;
     edited.current = true;
     setSaved(false);
@@ -197,6 +247,7 @@ export function EditableTableAssignment({
   }
 
   async function refreshMembers() {
+    if (absenceRef.current) return;
     if (!onRefreshMembers || savingRef.current || refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
@@ -217,6 +268,7 @@ export function EditableTableAssignment({
   }, [tables, storageKey]);
 
   function moveSeat(fromTableName: string, seatIndex: number, toTableName: string) {
+    if (absenceRef.current) return;
     if (fromTableName === toTableName) return;
     edited.current = true;
     setSaved(false);
@@ -232,6 +284,7 @@ export function EditableTableAssignment({
   }
 
   function reorderSeat(tableName: string, seatIndex: number, delta: number) {
+    if (absenceRef.current) return;
     edited.current = true;
     setSaved(false);
     setTables((current) => {
@@ -246,6 +299,7 @@ export function EditableTableAssignment({
   }
 
   async function saveTables() {
+    if (absenceRef.current) return;
     if (savingRef.current || refreshingRef.current) return;
     savingRef.current = true;
     setSaving(true);
@@ -261,6 +315,7 @@ export function EditableTableAssignment({
       setRecentTable(null);
       setManualMessage("");
       setManualError("");
+      setAbsenceMessage("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "保存できませんでした。もう一度お試しください。");
     } finally { savingRef.current = false; setSaving(false); }
@@ -479,6 +534,11 @@ export function EditableTableAssignment({
 
   return (
     <div className="grid gap-5">
+      <fieldset disabled={markingAbsent} className="grid min-w-0 gap-5">
+      {onMarkAbsent && <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+        <p>急な欠席は、各参加者の「欠席にする」から変更できます。他の配置は維持します。出欠変更後、配置の「保存」と会員向けの「公開」も行ってください。</p>
+        {absenceMessage && <p role="status" className="mt-2 font-bold">{absenceMessage}</p>}
+      </div>}
       <section aria-label="ゲストとテーブルを手動で追加" className="min-w-0 rounded border border-blue-200 bg-blue-50 p-4 sm:p-5">
         <h2 className="text-lg font-black text-deep">ゲスト・テーブルを手動で追加</h2>
         <p className="mt-2 text-sm text-slate-700">既存の配置はそのままで、空のテーブルを増やしたり、ゲストを追加できます。自動生成をやり直す必要はありません。</p>
@@ -597,6 +657,7 @@ export function EditableTableAssignment({
                     >
                       {tableNames.map((name) => <option key={name} value={name}>{name}に移動</option>)}
                     </select>
+                    {onMarkAbsent && <button type="button" aria-label={`${printableSeatName(seat)}を欠席にする`} onClick={() => { setAbsenceError(""); setAbsenceTarget({ tableName: table.tableName, index, seat }); }} className="focus-ring rounded border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700">欠席にする</button>}
                   </div>
                 </div>
               ))}
@@ -604,6 +665,22 @@ export function EditableTableAssignment({
           </article>
         ))}
       </fieldset>
+      </fieldset>
+      <dialog ref={absenceDialogRef} aria-label="欠席への変更を確認" aria-describedby="absence-description" className="m-auto w-[calc(100%_-_2rem)] max-w-md rounded border-0 bg-white p-5 shadow-soft backdrop:bg-slate-950/60" onCancel={(event) => { if (absenceRef.current) event.preventDefault(); else setAbsenceTarget(null); }}>
+        {absenceTarget && <>
+          <h2 className="text-xl font-black text-deep">欠席に変更しますか？</h2>
+          <div id="absence-description" className="mt-3 grid gap-2 text-sm text-slate-700">
+            <p className="font-bold">{printableSeatName(absenceTarget.seat)}さん（{absenceTarget.tableName}）</p>
+            <p>{absenceTarget.seat.member ? "出欠を「欠席」に保存し、この方だけを編集中の配置から外します。" : "参加者名簿に氏名・会社表示が一致するゲストが1名いる場合は、出欠も「欠席」に保存します。名簿に登録のないゲストは配置からのみ外します。"}</p>
+            <p>残りの配置は変えません。配置の変更は、この後に「保存」と「公開」が必要です。</p>
+          </div>
+          {absenceError && <p role="alert" className="mt-3 text-sm font-bold text-red-700">{absenceError}</p>}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <button data-absence-cancel type="button" disabled={markingAbsent} onClick={() => setAbsenceTarget(null)} className="focus-ring rounded border border-slate-200 px-4 py-3 text-sm font-bold disabled:opacity-50">キャンセル</button>
+            <button type="button" disabled={markingAbsent} onClick={confirmAbsence} className="focus-ring rounded bg-red-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{markingAbsent ? "変更中…" : "欠席にして配置から外す"}</button>
+          </div>
+        </>}
+      </dialog>
     </div>
   );
 }

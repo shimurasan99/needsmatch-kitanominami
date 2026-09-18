@@ -12,7 +12,7 @@ function load(relative, mocks = {}) {
   const filename = path.join(__dirname, '..', relative);
   const loaded = new Module(filename, module);
   loaded.paths = module.paths;
-  loaded.require = (id) => Object.hasOwn(mocks, id) ? mocks[id] : id === '@/lib/table-assignment/manual-addition' ? load('lib/table-assignment/manual-addition.ts') : id === '@/lib/table-assignment/snapshot' ? load('lib/table-assignment/snapshot.ts') : id === '@/lib/table-assignment/member-identity' ? load('lib/table-assignment/member-identity.ts') : id === '@/lib/data/table-assignment-recovery' ? load('lib/data/table-assignment-recovery.ts') : require(id);
+  loaded.require = (id) => Object.hasOwn(mocks, id) ? mocks[id] : id.startsWith('@/lib/') ? load(`${id.slice(2)}.ts`, mocks) : require(id);
   loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX }
   }).outputText, filename);

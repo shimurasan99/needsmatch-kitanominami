@@ -9,6 +9,7 @@ const path = require('node:path');
 const Module = require('node:module');
 const ts = require('typescript');
 const { saveAttendance } = require('./attendance-rpc-fixture.cjs');
+const { publishTableAssignment } = require('./publication-rpc-fixture.cjs');
 
 const filename = path.join(__dirname, '../lib/data/mock.ts');
 const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
@@ -58,18 +59,9 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url.pathname.endsWith('/publish_table_assignment')) {
-        const shared = state.get('shared_site_state');
-        const drafts = shared.find(row => row.state_key === 'table-assignment-drafts');
-        let published = shared.find(row => row.state_key === 'table-assignments');
-        const draft = drafts?.payload?.[body.p_meeting_id];
-        const prior = published?.payload?.[body.p_meeting_id];
-        if (draft?.updatedAt !== body.p_expected_draft_revision || (prior?.publishedAt ?? null) !== body.p_expected_publication_revision) { reply(409, { code: 'P0001', message: 'NM_TABLE_CONFLICT' }); return; }
-        if (!draft.tables?.length) { reply(400, { code: '22023', message: 'NM_TABLE_EMPTY' }); return; }
-        const now = new Date(Math.max(Date.now(), prior ? Date.parse(prior.publishedAt) + 1 : 0)).toISOString();
-        const publication = { meetingId: body.p_meeting_id, tables: structuredClone(draft.tables), publishedAt: now, sourceUpdatedAt: draft.updatedAt };
-        if (!published) { published = { state_key: 'table-assignments', payload: {}, updated_at: now }; shared.push(published); }
-        published.payload[body.p_meeting_id] = publication; published.updated_at = now;
-        reply(200, { publication, updatedAt: now }); return;
+        const result = publishTableAssignment(state, body);
+        reply(result.error ? (result.error.code === 'P0001' ? 409 : 400) : 200, result.error ?? result.data);
+        return;
       }
       reply(404, { message: 'Unknown fixture RPC' }); return;
     } catch (error) { reply(400, { message: error.message }); return; }

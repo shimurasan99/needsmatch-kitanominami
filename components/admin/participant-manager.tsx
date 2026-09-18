@@ -132,7 +132,9 @@ export function ParticipantManager({
 
   const attendingMembers = useMemo(() => members.filter((member) => statuses[member.id] === "参加"), [members, statuses]);
   const sortedMembers = useMemo(() => sortMembersForDirectory(members), [members]);
-  const totalAttendees = attendingMembers.length + guests.length;
+  const attendingGuestCount = guests.filter((guest) => guest.status !== "欠席").length;
+  const absentGuestCount = guests.length - attendingGuestCount;
+  const totalAttendees = attendingMembers.length + attendingGuestCount;
 
   function updateStatus(memberId: string, status: MemberAttendanceStatus) {
     if (!isReady || isSaving) return;
@@ -193,6 +195,12 @@ export function ParticipantManager({
     setSavedMessage("");
   }
 
+  function updateGuestStatus(guestId: string, status: "参加" | "欠席") {
+    if (!isReady || isSaving || liveDraft.current.saving) return;
+    setGuests((current) => current.map((guest) => guest.id === guestId ? { ...guest, status } : guest));
+    setSavedMessage("");
+  }
+
   function exportCsv() {
     const memberRows = members.map((member) => [
       member.memberNo,
@@ -203,7 +211,7 @@ export function ParticipantManager({
       "",
       ""
     ]);
-    const guestRows = guests.map((guest) => ["ゲスト", guest.name, guest.company, guest.industry, "参加", guest.type, guest.branchName]);
+    const guestRows = guests.map((guest) => ["ゲスト", guest.name, guest.company, guest.industry, guest.status ?? "参加", guest.type, guest.branchName]);
     const rows = [["会員番号", "名前", "会社名", "業種", "出欠", "種別", "支部名"], ...memberRows, ...guestRows];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
@@ -244,10 +252,10 @@ export function ParticipantManager({
       </div>
 
       <div className="grid gap-3 rounded border border-slate-200 bg-white p-4 shadow-soft sm:grid-cols-4">
-        <Stat label="参加" value={`${counts.参加 + guests.length}名`} className="text-forest" />
-        <Stat label="欠席" value={`${counts.欠席}名`} className="text-accent" />
+        <Stat label="参加" value={`${counts.参加 + attendingGuestCount}名`} className="text-forest" />
+        <Stat label="欠席" value={`${counts.欠席 + absentGuestCount}名`} className="text-accent" />
         <Stat label="未定" value={`${counts.未定}名`} className="text-slate-600" />
-        <Stat label="ゲスト" value={`${guests.length}名`} className="text-deep" />
+        <Stat label="参加ゲスト" value={`${attendingGuestCount}名`} className="text-deep" />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -353,7 +361,7 @@ export function ParticipantManager({
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <h2 className="font-black text-deep">参加者一覧</h2>
-              <p className="mt-1 text-sm text-slate-600">参加会員 {attendingMembers.length}名 / ゲスト {guests.length}名 / 合計 {totalAttendees}名</p>
+              <p className="mt-1 text-sm text-slate-600">参加会員 {attendingMembers.length}名 / 参加ゲスト {attendingGuestCount}名 / 合計 {totalAttendees}名（欠席ゲスト {absentGuestCount}名）</p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -368,6 +376,8 @@ export function ParticipantManager({
                 industry={guest.industry || "業種未入力"}
                 label={guest.type === "他支部" && guest.branchName ? `他支部: ${guest.branchName}` : guest.type}
                 onRemove={() => removeGuest(guest.id)}
+                status={guest.status ?? "参加"}
+                onStatusChange={(status) => updateGuestStatus(guest.id, status)}
               />
             ))}
             {totalAttendees === 0 && <p className="text-sm font-bold text-slate-500">参加者はまだ選択されていません。</p>}
@@ -392,13 +402,17 @@ function ParticipantCard({
   company,
   industry,
   label,
-  onRemove
+  onRemove,
+  status,
+  onStatusChange
 }: {
   name: string;
   company: string;
   industry: string;
   label: string;
   onRemove?: () => void;
+  status?: "参加" | "欠席";
+  onStatusChange?: (status: "参加" | "欠席") => void;
 }) {
   return (
     <div className="flex items-start justify-between gap-3 rounded border border-slate-200 bg-snow p-3">
@@ -409,6 +423,12 @@ function ParticipantCard({
         </div>
         <p className="mt-1 text-sm text-slate-600">{company}</p>
         <p className="mt-1 text-xs font-bold text-slate-500">{industry}</p>
+        {onStatusChange && <label className="mt-2 grid gap-1 text-sm font-bold">
+          出欠
+          <select aria-label={`${name}の出欠`} value={status} onChange={(event) => onStatusChange(event.target.value as "参加" | "欠席")} className="focus-ring rounded border border-slate-300 bg-white px-3 py-2">
+            <option value="参加">参加</option><option value="欠席">欠席</option>
+          </select>
+        </label>}
       </div>
       {onRemove && (
         <button type="button" onClick={onRemove} className="focus-ring rounded border border-slate-200 bg-white p-2 text-accent hover:bg-red-50" aria-label={`${name}を削除`}>
