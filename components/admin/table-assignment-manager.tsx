@@ -305,6 +305,8 @@ export function TableAssignmentManager({
           </div>
         </div>
 
+        <p className="mt-3 text-sm font-bold text-slate-600">公開すると、トップページの「テーブル割を見る」から、ログインしていない方も氏名・業種などの配置情報を閲覧できます。未公開の編集内容は表示されません。</p>
+
         {currentAssignment ? (
           <ReadOnlyTables tables={currentAssignment.tables} />
         ) : (
@@ -345,7 +347,7 @@ export function TableAssignmentManager({
         restoreDraft={editor.restoreDraft}
         savedAt={editor.savedAt}
         storageKey={`draft-table-assignment-${meetingId}`}
-        helperText="保存を押すと、運営全員が同じテーブル割りを編集できます。作業途中の変更はこの端末に保持されます。会員向けの表示には、保存後に「公開する」を押してください。"
+        helperText="保存を押すと、運営全員が同じテーブル割りを編集できます。作業途中の変更はこの端末に保持されます。トップページと会員ページへの表示には、保存後に「公開する」を押してください。公開後はログインなしでも閲覧できます。"
         onSave={saveCurrentTables}
         members={members}
         participantStatuses={storedParticipants?.statuses ?? {}}

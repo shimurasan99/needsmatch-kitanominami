@@ -49,6 +49,7 @@ export function NextMeetingCard({ initialMeetings }: { initialMeetings: Meeting[
           <Info icon={<MapPin size={20} />} label="会場" value={meetingVenue || "会場調整中"} />
         </div>
         <ButtonLink href="/entry">参加申込へ進む</ButtonLink>
+        <ButtonLink href={`/table-assignments/${encodeURIComponent(nextMeeting.id)}`} variant="secondary">テーブル割を見る</ButtonLink>
       </div>
     </div>
   );
