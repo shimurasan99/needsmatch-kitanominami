@@ -1,11 +1,11 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, FileText, RefreshCw, Save, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Crown, FileDown, FileText, Plus, RefreshCw, Save, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AssignmentSeat, AssignmentTable, Member } from "@/types/domain";
 import { csvCell } from "@/lib/data/csv-export";
 import { compactTableAssignment } from "@/lib/table-assignment/snapshot";
-import { addMemberToTable, getUnassignedMembers } from "@/lib/table-assignment/manual-addition";
+import { addEmptyTable, addGuestToTable, addMemberToTable, getUnassignedMembers, nextTableName } from "@/lib/table-assignment/manual-addition";
 
 function seatKey(seat: AssignmentSeat, index: number) {
   return seat.member?.id ?? `${seat.guestName ?? "guest"}-${index}`;
@@ -89,14 +89,85 @@ export function EditableTableAssignment({
   const [additionMessage, setAdditionMessage] = useState("");
   const [recentAddition, setRecentAddition] = useState<{ id: string; name: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [guestCompany, setGuestCompany] = useState("");
+  const [guestTableName, setGuestTableName] = useState("");
+  const [manualMessage, setManualMessage] = useState("");
+  const [manualError, setManualError] = useState("");
+  const [recentGuest, setRecentGuest] = useState<{ name: string; company: string } | null>(null);
+  const [recentTable, setRecentTable] = useState<string | null>(null);
 
   const tableNames = useMemo(() => tables.map((table) => table.tableName), [tables]);
   const unassignedMembers = useMemo(() => getUnassignedMembers(tables, members), [tables, members]);
   const selectedMember = unassignedMembers.find((member) => member.id === additionalMemberId);
   const selectedTable = tables.find((table) => table.tableName === additionalTableName);
   const exceedsCapacity = !!selectedMember && !!selectedTable && !!seatsPerTable && selectedTable.seats.length >= seatsPerTable;
+  const guestTable = tables.find((table) => table.tableName === guestTableName);
+  const guestExceedsCapacity = !!guestName.trim() && !!guestTable && !!seatsPerTable && guestTable.seats.length >= seatsPerTable;
+  const canUndoTable = recentTable !== null && tables.some((table) => table.tableName === recentTable && table.seats.length === 0);
 
   useEffect(() => { addingRef.current = false; }, [tables]);
+
+  function addTable() {
+    if (savingRef.current || refreshingRef.current || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      const next = addEmptyTable(tables);
+      const name = next[next.length - 1].tableName;
+      edited.current = true;
+      setTables(next);
+      setSaved(false);
+      setError("");
+      setManualError("");
+      setRecentTable(name);
+      setGuestTableName(name);
+      setAdditionalTableName(name);
+      setManualMessage(`${name}を追加しました。ゲストの入力や既存の参加者の移動ができます。変更後は「保存」を押してください。`);
+    } catch (cause) {
+      addingRef.current = false;
+      setManualError(cause instanceof Error ? cause.message : "テーブルを追加できませんでした。");
+    }
+  }
+
+  function addGuest() {
+    if (savingRef.current || refreshingRef.current || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      const next = addGuestToTable(tables, guestName, guestCompany, guestTableName);
+      edited.current = true;
+      setTables(next);
+      setSaved(false);
+      setError("");
+      setManualError("");
+      setRecentGuest({ name: guestName.trim(), company: guestCompany.trim() });
+      setManualMessage(`${guestName.trim()}さんを${guestTableName}の末尾に追加しました。「保存」で運営全員に共有し、保存後に公開すると会員ページにも反映されます。`);
+      setGuestName("");
+      setGuestCompany("");
+    } catch (cause) {
+      addingRef.current = false;
+      setManualError(cause instanceof Error ? cause.message : "ゲストを追加できませんでした。");
+    }
+  }
+
+  function undoRecentGuest() {
+    if (!recentGuest || savingRef.current || refreshingRef.current || addingRef.current) return;
+    edited.current = true;
+    setSaved(false);
+    setTables((current) => current.map((table) => ({ ...table, seats: table.seats.filter((seat) => !(!seat.member && seat.guestName?.trim() === recentGuest.name && (seat.guestCompany ?? "").trim() === recentGuest.company)) })));
+    setManualError("");
+    setManualMessage(`${recentGuest.name}さんの直前の追加を取り消しました。他の配置は変更していません。`);
+    setRecentGuest(null);
+  }
+
+  function undoRecentTable() {
+    if (!canUndoTable || savingRef.current || refreshingRef.current || addingRef.current) return;
+    edited.current = true;
+    setSaved(false);
+    setTables((current) => current.filter((table) => table.tableName !== recentTable || table.seats.length > 0));
+    setManualError("");
+    setManualMessage(`${recentTable}の追加を取り消しました。他の配置は変更していません。`);
+    setRecentTable(null);
+  }
 
   function addSelectedMember() {
     if (savingRef.current || refreshingRef.current || addingRef.current || !selectedMember || !selectedTable) return;
@@ -186,6 +257,10 @@ export function EditableTableAssignment({
       setSaved(true);
       setRecentAddition(null);
       setAdditionMessage("");
+      setRecentGuest(null);
+      setRecentTable(null);
+      setManualMessage("");
+      setManualError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "保存できませんでした。もう一度お試しください。");
     } finally { savingRef.current = false; setSaving(false); }
@@ -404,6 +479,27 @@ export function EditableTableAssignment({
 
   return (
     <div className="grid gap-5">
+      <section aria-label="ゲストとテーブルを手動で追加" className="min-w-0 rounded border border-blue-200 bg-blue-50 p-4 sm:p-5">
+        <h2 className="text-lg font-black text-deep">ゲスト・テーブルを手動で追加</h2>
+        <p className="mt-2 text-sm text-slate-700">既存の配置はそのままで、空のテーブルを増やしたり、ゲストを追加できます。自動生成をやり直す必要はありません。</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={addTable} disabled={saving || refreshing} className="focus-ring inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50"><Plus size={17} />{nextTableName(tables)}を追加</button>
+          {recentTable && <button type="button" onClick={undoRecentTable} disabled={saving || refreshing || !canUndoTable} className="focus-ring rounded border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-50">直前の空テーブル追加を取り消す</button>}
+        </div>
+        {recentTable && !canUndoTable && <p className="mt-2 text-sm text-slate-600">追加したテーブルに参加者がいるため取り消せません。先に別のテーブルへ移動してください。</p>}
+        <fieldset disabled={saving || refreshing || !tables.length} className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2">
+          <label className="grid min-w-0 gap-2"><span className="text-sm font-bold text-deep">ゲストの氏名</span><input type="text" value={guestName} maxLength={100} onChange={(event) => setGuestName(event.target.value)} placeholder="氏名を入力" className="focus-ring w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-3 text-sm" /></label>
+          <label className="grid min-w-0 gap-2"><span className="text-sm font-bold text-deep">ゲストの会社名（任意）</span><input type="text" value={guestCompany} maxLength={100} onChange={(event) => setGuestCompany(event.target.value)} placeholder="会社名などを入力" className="focus-ring w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-3 text-sm" /></label>
+          <label className="grid min-w-0 gap-2 sm:col-span-2"><span className="text-sm font-bold text-deep">ゲストの追加先テーブル</span><select value={guestTable?.tableName ?? ""} onChange={(event) => setGuestTableName(event.target.value)} className="focus-ring w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-3 text-sm"><option value="">テーブルを選択してください</option>{tables.map((table) => <option key={table.tableName} value={table.tableName}>{table.tableName}（現在{table.seats.length}名）</option>)}</select></label>
+          {guestExceedsCapacity && <p role="status" className="rounded bg-amber-100 p-3 text-sm font-bold text-amber-900 sm:col-span-2">追加すると{guestTable!.seats.length + 1}名になり、設定の{seatsPerTable}名を超えます。会場の席数を確認して追加してください。</p>}
+          <button type="button" onClick={addGuest} disabled={!guestName.trim() || !guestTable} className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-forest px-4 py-3 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2"><UserPlus size={17} />ゲストをテーブルに追加</button>
+        </fieldset>
+        {!tables.length && <p className="mt-3 text-sm font-bold text-slate-600">まず空のテーブルを追加してください。</p>}
+        <p className="mt-3 text-sm text-slate-700">ここでのゲスト追加はテーブル割りだけに反映します。参加者名簿にも必要な場合は「参加者管理」に登録してください。自動生成をやり直す際は参加者管理の名簿が使われます。</p>
+        {manualError && <p role="alert" className="mt-3 text-sm font-bold text-red-700">{manualError}</p>}
+        {manualMessage && <p role="status" className="mt-3 text-sm font-bold text-deep">{manualMessage}</p>}
+        {recentGuest && <button type="button" onClick={undoRecentGuest} disabled={saving || refreshing} className="focus-ring mt-3 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-50">直前のゲスト追加を取り消す</button>}
+      </section>
       {onRefreshMembers && <section aria-label="会員を手動で追加" className="min-w-0 rounded border border-blue-200 bg-blue-50 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-black text-deep">急遽参加する会員を手動で追加</h2>
@@ -446,7 +542,7 @@ export function EditableTableAssignment({
           {error && <p role="alert" className="mt-2 text-sm font-bold text-red-700">{error}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={saveTables} disabled={saving || refreshing || !tables.some((table) => table.seats.length)} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+          <button type="button" onClick={saveTables} disabled={saving || refreshing || !tables.length} className="focus-ring inline-flex items-center gap-2 rounded bg-forest px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
             <Save size={16} />
             {saving ? "保存中…" : "保存"}
           </button>
@@ -476,6 +572,7 @@ export function EditableTableAssignment({
               <span className="rounded bg-snow px-3 py-1 text-xs font-bold text-slate-600">{table.seats.length}名</span>
             </div>
             <div className="grid gap-2">
+              {table.seats.length === 0 && <p className="rounded bg-snow p-3 text-sm text-slate-600">空のテーブルです。ゲスト・会員の追加や他のテーブルからの移動ができます。</p>}
               {table.seats.map((seat, index) => (
                 <div key={`${table.tableName}-${seatKey(seat, index)}`} className="rounded bg-snow p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -493,6 +590,7 @@ export function EditableTableAssignment({
                       <ArrowDown size={15} />
                     </button>
                     <select
+                      aria-label={`${seat.member?.name ?? seat.guestName ?? "参加者"}の移動先テーブル`}
                       value={table.tableName}
                       onChange={(event) => moveSeat(table.tableName, index, event.target.value)}
                       className="focus-ring rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold"

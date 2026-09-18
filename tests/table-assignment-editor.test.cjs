@@ -39,7 +39,7 @@ test('editing survives parent prop refresh, navigation, and an async save', asyn
   const props = { initialTables: initial, storageKey: 'draft', onSave: async (tables) => { persisted = tables; } };
   let renderer;
   await act(async () => { renderer = create(React.createElement(Editor, props)); });
-  await act(async () => renderer.root.findAllByType('select')[0].props.onChange({ target: { value: 'Bテーブル' } }));
+  await act(async () => renderer.root.findAllByType('select').find((select) => select.props['aria-label'] === 'oneの移動先テーブル').props.onChange({ target: { value: 'Bテーブル' } }));
   assert.deepEqual(names(JSON.parse(values.get('draft')).tables), [['two'], ['three', 'one']]);
   await act(async () => renderer.update(React.createElement(Editor, { ...props, initialTables: structuredClone(initial) })));
   await act(async () => saveButton(renderer).props.onClick());
@@ -123,7 +123,7 @@ test('manager generates only on request and uses actual previous two meetings, n
   assert.equal(generated, 1, 'participant refresh must not regenerate or reset the editor');
   await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
   assert.equal(generated, 2, 'same-size generation button must still work');
-  await act(async () => renderer.root.findAllByType('select').find((select) => select.props.value === 'Aテーブル').props.onChange({ target: { value: 'Bテーブル' } }));
+  await act(async () => renderer.root.findAllByType('select').find((select) => select.props['aria-label'] === 'oneの移動先テーブル').props.onChange({ target: { value: 'Bテーブル' } }));
   await act(async () => renderer.update(React.createElement(Manager, { meetingId: 'current', initialMembers: [], initialParticipants: [], initialMeetings: structuredClone(meetings), initialSeatsPerTable: 5 })));
   assert.equal(generated, 2);
   await act(async () => saveButton(renderer).props.onClick());
@@ -400,6 +400,41 @@ test('draft backup failure prevents replacing the only browser copy', () => {
   assert.equal(values.get('draft-table-assignment-july'), raw);
 });
 
+test('empty-table current draft restores in manager but empty legacy records remain excluded', async () => {
+  const values = storage();
+  const emptyTables = [{ tableName: 'Aテーブル', seats: [] }, { tableName: 'Bテーブル', seats: [] }];
+  const draft = JSON.stringify({ tables: emptyTables, updatedAt: '2026-09-18T00:00:00.000Z' });
+  values.set('draft-table-assignment-current', draft);
+  values.set('past-table-assignment-legacy', draft);
+  values.set('draft-table-assignment-legacy-5', draft);
+  values.set('nm_table_assignment_recovery_archived::test', draft);
+  values.set('nm_published_table_assignments', JSON.stringify({ legacy: JSON.parse(draft) }));
+  values.set('draft-table-assignment-no-tables', JSON.stringify({ tables: [], updatedAt: '2026-09-18' }));
+  const recovery = load('lib/data/table-assignment-recovery.ts');
+  assert.deepEqual(recovery.readTableRecoveryCandidates('current')[0].tables, emptyTables);
+  assert.deepEqual(recovery.readTableRecoveryCandidates('legacy'), []);
+  assert.deepEqual(recovery.readTableRecoveryCandidates('archived')[0].tables, emptyTables);
+  assert.deepEqual(recovery.readTableRecoveryCandidates('no-tables'), []);
+  recovery.preserveTableDraft('current');
+  const preserved = recovery.readTableRecoveryCandidates('current').find(candidate => candidate.key.startsWith('nm_table_assignment_recovery_current::'));
+  assert.deepEqual(preserved.tables, emptyTables);
+  assert.equal(values.get(preserved.key), draft);
+  let editorTables;
+  const { TableAssignmentManager: Manager } = load('components/admin/table-assignment-manager.tsx', {
+    '@/components/table-assignment/editable-table-assignment': { EditableTableAssignment: (props) => { editorTables = props.initialTables; return null; } },
+    '@/lib/data/member-overrides': { fetchManagedMembers: async () => [] },
+    '@/lib/data/participant-storage': { fetchStoredParticipants: async () => ({ statuses: {}, guests: [] }), formatLocalUpdatedAt: () => '', subscribeStoredParticipants: () => () => {}, storedParticipantsValueToParticipants: () => [] },
+    '@/lib/data/meeting-storage': { fetchMeetings: async () => [] },
+    '@/lib/data/table-assignment-publication': { fetchSavedTableAssignments: async () => ({}), fetchPublishedTableAssignments: async () => ({}) },
+    '@/lib/table-assignment/generator': {}
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(Manager, { meetingId: 'current', initialMembers: [], initialParticipants: [], initialMeetings: [], initialSeatsPerTable: 5 })); });
+  assert.deepEqual(editorTables, emptyTables);
+  assert.equal(values.get('draft-table-assignment-current'), draft);
+  await act(async () => renderer.unmount());
+});
+
 test('focus/timer attendance refresh never resets editor; generation refetches all inputs, locks duplicates and preserves edits on failure', async () => {
   storage();
   const listeners = {};
@@ -429,7 +464,7 @@ test('focus/timer attendance refresh never resets editor; generation refetches a
   assert.equal(received.participants.length, 2);
   assert.equal(received.members.length, 2);
   assert.equal(received.history[0].tableName, 'history-2');
-  await act(async () => renderer.root.findAllByType('select')[1].props.onChange({ target: { value: 'Bテーブル' } }));
+  await act(async () => renderer.root.findAllByType('select').find((select) => select.props['aria-label'] === 'oneの移動先テーブル').props.onChange({ target: { value: 'Bテーブル' } }));
   const before = window.localStorage.getItem('draft-table-assignment-current');
   version = 3;
   await act(async () => listeners.focus());

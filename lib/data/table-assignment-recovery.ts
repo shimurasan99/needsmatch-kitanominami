@@ -19,12 +19,12 @@ function readJson(key: string): unknown {
   try { return JSON.parse(window.localStorage.getItem(key) ?? "null"); } catch { return null; }
 }
 
-function parseCandidate(value: unknown, key: string, label: string, seatsPerTable?: number): TableRecoveryCandidate | null {
+function parseCandidate(value: unknown, key: string, label: string, seatsPerTable?: number, allowEmptyTables = false): TableRecoveryCandidate | null {
   if (!value || typeof value !== "object") return null;
   const record = value as { tables?: unknown; updatedAt?: unknown; publishedAt?: unknown };
   const tables = Array.isArray(value) ? value : record.tables;
   if (!Array.isArray(tables) || !tables.length || !tables.every((table) => table && typeof table.tableName === "string" && Array.isArray(table.seats) && table.seats.every((seat: { member?: { id?: unknown; name?: unknown }; guestName?: unknown } | null) => seat && (seat.member ? typeof seat.member.id === "string" && typeof seat.member.name === "string" : typeof seat.guestName === "string")))) return null;
-  if (!tables.some((table) => table.seats.length)) return null;
+  if (!allowEmptyTables && !tables.some((table) => table.seats.length)) return null;
   const date = record.updatedAt ?? record.publishedAt;
   return { key, label, tables: tables as AssignmentTable[], updatedAt: typeof date === "string" ? date : "", seatsPerTable };
 }
@@ -40,14 +40,17 @@ export function readTableRecoveryCandidates(meetingId: string): TableRecoveryCan
     [`draft-table-assignment-${meetingId}`, "この端末の作業途中の下書き（未保存の可能性があります）"]
   ];
   const candidates = keys.flatMap(([key, label, size]) => {
-    const candidate = parseCandidate(readJson(key), key, label, size);
+    // Empty named tables are valid work in progress in the current editor
+    // (and its scoped preserved backups below).
+    // Keep excluding empty legacy/publication records as historical evidence.
+    const candidate = parseCandidate(readJson(key), key, label, size, key === `draft-table-assignment-${meetingId}`);
     return candidate ? [candidate] : [];
   });
   try {
     for (let index = 0; index < window.localStorage.length; index++) {
       const key = window.localStorage.key(index) ?? "";
       if (!key.startsWith(`nm_table_assignment_recovery_${encodeURIComponent(meetingId)}::`)) continue;
-      const candidate = parseCandidate(readJson(key), key, "置き換える前に保管した下書き");
+      const candidate = parseCandidate(readJson(key), key, "置き換える前に保管した下書き", undefined, true);
       if (candidate) candidates.push(candidate);
     }
   } catch { /* Other known legacy keys remain available. */ }
