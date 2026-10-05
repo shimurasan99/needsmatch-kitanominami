@@ -69,8 +69,8 @@ const server = http.createServer(async (req, res) => {
   if (!table || !state.has(table)) { reply(404, { code: '42P01', message: 'Unknown fixture table' }); return; }
   try {
     const rows = state.get(table);
-    const filters = [...url.searchParams].filter(([, value]) => value.startsWith('eq.') || value.startsWith('neq.'));
-    const matches = (row) => filters.every(([column, expression]) => expression.startsWith('eq.') ? String(row[column]) === expression.slice(3) : String(row[column]) !== expression.slice(4));
+    const filters = [...url.searchParams].filter(([, value]) => /^(eq|neq|like)\./.test(value));
+    const matches = (row) => filters.every(([column, expression]) => expression.startsWith('like.') ? String(row[column]).startsWith(expression.slice(5).replace(/[%*]$/, '')) : expression.startsWith('eq.') ? String(row[column]) === expression.slice(3) : String(row[column]) !== expression.slice(4));
     let result;
     if (req.method === 'GET') result = rows.filter(matches);
     else if (req.method === 'POST' || req.method === 'PATCH') {
@@ -92,6 +92,8 @@ const server = http.createServer(async (req, res) => {
     } else { reply(405, { message: 'Fixture supports GET/POST/PATCH only' }); return; }
     const order = url.searchParams.get('order')?.split('.');
     if (order) result.sort((a, b) => String(a[order[0]]).localeCompare(String(b[order[0]])) * (order[1] === 'desc' ? -1 : 1));
+    const offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || result.length);
+    result = result.slice(offset, offset + limit);
     const selection = url.searchParams.get('select');
     if (selection && selection !== '*') result = result.map((row) => Object.fromEntries(selection.split(',').map((key) => [key, row[key]])));
     if (req.headers.accept?.includes('application/vnd.pgrst.object+json')) {

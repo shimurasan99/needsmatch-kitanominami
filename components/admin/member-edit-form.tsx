@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import { Save, Upload } from "lucide-react";
 import { saveMemberOverride, type MemberEditableFields } from "@/lib/data/member-overrides";
-import type { MajorIndustry, Member, RoleName } from "@/types/domain";
+import type { MajorIndustry, Member, MemberStatus, RoleName } from "@/types/domain";
 
 const roles: RoleName[] = ["主催", "事務局長", "幹事", "役員", "支部サポーター", "準役員", "一般会員"];
 const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容など）", "保険・建築業", "IT・販売業", "その他"];
@@ -13,6 +13,7 @@ const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容な�
 export function MemberEditForm({ member }: { member: Member }) {
   const merged = member;
   const baseline = useRef<MemberEditableFields>(member);
+  const [basic, setBasic] = useState({ name: member.name, kana: member.kana, company: member.company, bio: member.bio, status: member.status, isVisible: member.isVisible });
   const [profileImageUrl, setProfileImageUrl] = useState(merged.profileImageUrl);
   const [position, setPosition] = useState<RoleName>(merged.position);
   const [isTableLeader, setIsTableLeader] = useState(merged.isTableLeader);
@@ -31,7 +32,8 @@ export function MemberEditForm({ member }: { member: Member }) {
     if (isSaving || isProcessingImage) return;
     setIsSaving(true);
     try {
-      const values = { profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl };
+      if (!basic.name.trim()) throw new Error("氏名を入力してください。");
+      const values = { ...basic, name: basic.name.trim(), profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl };
       const changes = Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== baseline.current[key as keyof MemberEditableFields])) as Partial<MemberEditableFields>;
       await saveMemberOverride(member.id, changes);
       baseline.current = values;
@@ -98,6 +100,9 @@ export function MemberEditForm({ member }: { member: Member }) {
         {saved && <p className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm font-bold text-forest">保存しました。会員紹介ページへ反映されます。</p>}
         {imageError && <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{imageError}</p>}
         <fieldset disabled={isSaving} className="grid gap-4 md:grid-cols-2">
+          {([['name','氏名'],['kana','フリガナ'],['company','会社名／屋号'],['bio','紹介文']] as const).map(([key,label]) => <label key={key} className="grid gap-2"><span className="text-sm font-bold text-slate-600">{label}</span><input required={key === "name"} value={basic[key]} onChange={e => setBasic(current => ({ ...current, [key]: e.target.value }))} className="focus-ring rounded border border-slate-200 px-3 py-3" /></label>)}
+          <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">在籍状態</span><select value={basic.status} onChange={e => setBasic(current => ({ ...current, status: e.target.value as MemberStatus }))} className="focus-ring rounded border border-slate-200 px-3 py-3">{["在籍", "休会", "退会"].map(s => <option key={s}>{s}</option>)}</select></label>
+          <label className="flex items-center gap-3"><input type="checkbox" checked={basic.isVisible} onChange={e => setBasic(current => ({ ...current, isVisible: e.target.checked }))} />公開の会員紹介に表示する</label>
           <label className="grid gap-2">
             <span className="text-sm font-bold text-slate-600">写真URL</span>
             <input

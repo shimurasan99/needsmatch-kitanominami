@@ -5,7 +5,7 @@ export const MEMBER_OVERRIDES_KEY = "nm_member_overrides";
 export const MEMBER_ADDITIONS_KEY = "nm_member_additions";
 export const MEMBER_DELETIONS_KEY = "nm_member_deletions";
 
-export type MemberEditableFields = Pick<Member, "profileImageUrl" | "position" | "isTableLeader" | "industry" | "majorIndustry" | "facebookUrl" | "instagramUrl" | "websiteUrl">;
+export type MemberEditableFields = Pick<Member, "name" | "kana" | "company" | "bio" | "status" | "isVisible" | "profileImageUrl" | "position" | "isTableLeader" | "industry" | "majorIndustry" | "facebookUrl" | "instagramUrl" | "websiteUrl">;
 
 export type MemberOverrides = Record<string, Partial<MemberEditableFields>>;
 type SharedMembers = { additions: Member[]; overrides: MemberOverrides; deletions: string[] };
