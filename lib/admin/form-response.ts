@@ -2,7 +2,7 @@ import { validDate } from "@/lib/admin/operations";
 
 export const FORM_SHEET_ID = "1-9ZoAycUL2PNpmbvJ9lv3GoQzz3OAFgFTXzQQsjtu0s";
 export const FORM_TAB_ID = 388947325;
-export type FormResponse = { sourceId: string; sourceRow: number; submittedAt: string; meetingDate: string; memberNo: string; name: string; company: string; industry: string; industryDetail: string; desiredPartners: string; branchName: string; referrer: string; oneOnOneUrl: string; facebookUrl: string; email: string; phone: string; note: string; receivedAt: string; applied?: { meetingId: string; memberId: string; guestId: string; at: string }; ignored?: boolean };
+export type FormResponse = { source?: "hp"; kana?: string; socialAttendance?: string; sourceId: string; sourceRow: number; submittedAt: string; meetingDate: string; memberNo: string; name: string; company: string; industry: string; industryDetail: string; desiredPartners: string; branchName: string; referrer: string; oneOnOneUrl: string; facebookUrl: string; email: string; phone: string; note: string; receivedAt: string; applied?: { meetingId: string; memberId: string; guestId: string; at: string }; ignored?: boolean };
 export function parseFormResponse(input: unknown): Omit<FormResponse, "sourceId" | "receivedAt"> {
   if (!input || typeof input !== "object") throw new Error("フォームデータが不正です。");
   const r = input as Record<string, unknown>;

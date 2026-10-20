@@ -3,6 +3,8 @@ import Link from "next/link";
 const adminLinks = [
   { href: "/admin/members", label: "会員管理" },
   { href: "/admin/operations", label: "名簿・受講・セミナー" },
+  { href: "/admin/routines", label: "毎月のルーティン" },
+  { href: "/admin/member-resources", label: "入会順・1on1保管" },
   { href: "/admin/meetings", label: "月例会管理" },
   { href: "/admin/deals", label: "商談成立実績" },
   { href: "/admin/gallery", label: "ギャラリー管理" },

@@ -1,4 +1,4 @@
-import { ButtonLink } from "@/components/ui/button-link";
+import { EntryForm } from "@/components/entry-form";
 
 export default function EntryPage() {
   return (
@@ -24,16 +24,9 @@ export default function EntryPage() {
             持ち物は名刺、筆記用具、PRに必要な資料です。キャンセルは48時間前までに参加支部の役員または紹介者へ連絡してください。
           </div>
         </article>
-        <aside className="rounded border border-slate-200 bg-white p-6 shadow-soft">
-          <h2 className="text-2xl font-black text-deep">申し込みリンク</h2>
-          <div className="mt-6 grid gap-3">
-            <ButtonLink href="https://docs.google.com/forms/d/e/1FAIpQLSfqDcLe-KUF0-XvE74QnfXeEl5dmux8DhRtCmz7a4oY_yx0jQ/viewform?fbclid=IwAR3WXWwXkm5T8SAHRFtY5JhhQJJxsSfwEMLPxMj0oJzBMhoa5FlOSo65SX4" external>
-              他支部からの参加申し込み
-            </ButtonLink>
-            <ButtonLink href="https://nm2014.jp/guest/" external variant="secondary">ゲスト参加申し込み</ButtonLink>
-          </div>
-        </aside>
+        <aside><p className="rounded bg-snow p-5">下の参加申込フォームにご記入ください。運営が内容を確認して名簿に反映します。</p></aside>
       </div>
+      <div className="mt-8"><EntryForm /></div>
     </section>
   );
 }
