@@ -25,6 +25,15 @@ const legacyIdentity = [
 ];
 const table = (people) => [{ tableName: '保存済み', seats: people.map((member) => ({ member, isLeader: false })) }];
 
+test('corrected number still resolves historical seats by old number AND name', () => {
+  const old = members.find(m => m.name === '中本 怜男');
+  const corrected = members.map(m => m.id === old.id ? { ...m, memberNo: '9649', previousMemberNumbers: ['9147'] } : m);
+  const result = reconcileTableMembers(table([{ ...old, id: 'legacy' }]), corrected);
+  assert.equal(result.warning, '');
+  assert.equal(result.tables[0].seats[0].member.id, old.id);
+  assert.notEqual(result.tables[0].seats[0].member.id, members.find(m => m.name === '佐藤 正人').id);
+});
+
 test('historical 32-member directory maps to current identity despite 29 reused positional ids', () => {
   const old = legacyIdentity.map(([memberNo, name], i) => ({ id: `m-${i + 1}`, memberNo, name }));
   const input = table(old);

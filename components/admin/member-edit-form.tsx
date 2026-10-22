@@ -13,7 +13,7 @@ const majorIndustries: MajorIndustry[] = ["サービス業（飲食・美容な�
 export function MemberEditForm({ member }: { member: Member }) {
   const merged = member;
   const baseline = useRef<MemberEditableFields>(member);
-  const [basic, setBasic] = useState({ name: member.name, kana: member.kana, company: member.company, bio: member.bio, status: member.status, isVisible: member.isVisible });
+  const [basic, setBasic] = useState({ memberNo: member.memberNo, name: member.name, kana: member.kana, company: member.company, bio: member.bio, status: member.status, isVisible: member.isVisible });
   const [profileImageUrl, setProfileImageUrl] = useState(merged.profileImageUrl);
   const [position, setPosition] = useState<RoleName>(merged.position);
   const [isTableLeader, setIsTableLeader] = useState(merged.isTableLeader);
@@ -33,7 +33,7 @@ export function MemberEditForm({ member }: { member: Member }) {
     setIsSaving(true);
     try {
       if (!basic.name.trim()) throw new Error("氏名を入力してください。");
-      const values = { ...basic, name: basic.name.trim(), profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl };
+      const values = { ...basic, memberNo: basic.memberNo.trim(), name: basic.name.trim(), profileImageUrl, position, isTableLeader, industry, majorIndustry, facebookUrl, instagramUrl, websiteUrl };
       const changes = Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== baseline.current[key as keyof MemberEditableFields])) as Partial<MemberEditableFields>;
       await saveMemberOverride(member.id, changes);
       baseline.current = values;
@@ -91,7 +91,7 @@ export function MemberEditForm({ member }: { member: Member }) {
           />
         </label>
         <p className="mt-2 text-xs leading-5 text-slate-500">JPEG・PNG・WebPに対応。選択後に「保存する」を押してください。</p>
-        <p className="mt-4 text-xs font-bold text-forest">会員No.{member.memberNo}</p>
+        <p className="mt-4 text-xs font-bold text-forest">会員No.{basic.memberNo}</p>
         <h2 className="mt-1 text-2xl font-black text-deep">{member.name}</h2>
         <p className="mt-1 text-sm text-slate-600">{member.email}</p>
       </aside>
@@ -100,6 +100,7 @@ export function MemberEditForm({ member }: { member: Member }) {
         {saved && <p className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm font-bold text-forest">保存しました。会員紹介ページへ反映されます。</p>}
         {imageError && <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{imageError}</p>}
         <fieldset disabled={isSaving} className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">会員番号</span><input required maxLength={40} value={basic.memberNo} onChange={e => setBasic(current => ({ ...current, memberNo: e.target.value }))} className="focus-ring rounded border border-slate-200 px-3 py-3" /></label>
           {([['name','氏名'],['kana','フリガナ'],['company','会社名／屋号'],['bio','紹介文']] as const).map(([key,label]) => <label key={key} className="grid gap-2"><span className="text-sm font-bold text-slate-600">{label}</span><input required={key === "name"} value={basic[key]} onChange={e => setBasic(current => ({ ...current, [key]: e.target.value }))} className="focus-ring rounded border border-slate-200 px-3 py-3" /></label>)}
           <label className="grid gap-2"><span className="text-sm font-bold text-slate-600">在籍状態</span><select value={basic.status} onChange={e => setBasic(current => ({ ...current, status: e.target.value as MemberStatus }))} className="focus-ring rounded border border-slate-200 px-3 py-3">{["在籍", "休会", "退会"].map(s => <option key={s}>{s}</option>)}</select></label>
           <label className="flex items-center gap-3"><input type="checkbox" checked={basic.isVisible} onChange={e => setBasic(current => ({ ...current, isVisible: e.target.checked }))} />公開の会員紹介に表示する</label>

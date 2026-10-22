@@ -8,6 +8,7 @@ export type DealIndustry = "美容" | "商材" | "イベント" | "IT" | "販売
 export type Member = {
   id: string;
   memberNo: string;
+  previousMemberNumbers?: string[];
   name: string;
   kana: string;
   company: string;

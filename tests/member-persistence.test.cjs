@@ -20,7 +20,7 @@ function fixture() {
   const exports = {};
   const source = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../lib/data/member-overrides.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(source, {
-    exports, require: () => api, Event, Set,
+    exports, require: (id) => id === '@/lib/data/mock' ? { members: [] } : api, Event, Set,
     window: {
       localStorage: { setItem() { throw new Error('QuotaExceeded'); }, getItem() { return JSON.stringify([{ id: 'stale', memberNo: '99' }]); } },
       dispatchEvent() {}
@@ -37,6 +37,17 @@ test('server reads and saves survive a full browser cache without reviving stale
   assert.equal(saved.length, 2);
   assert.equal(saved[1].name, 'Alice');
   assert.equal((await f.members.fetchManagedMembers(base))[1].memberNo, '2');
+});
+
+test('number corrections persist without merging people and preserve previous identity', async () => {
+  const f = fixture();
+  await f.members.saveMemberAdditions([], [{ id: 'n', memberNo: '9147', name: '中本 怜男' }, { id: 's', memberNo: '12', name: '佐藤 正人' }]);
+  await f.members.saveMemberOverride('n', { memberNo: ' 9649 ' });
+  assert.equal(f.state.overrides.n.memberNo, '9649');
+  assert.deepEqual(Array.from(f.state.overrides.n.previousMemberNumbers), ['9147']);
+  assert.equal((await f.members.fetchManagedMembers([])).find(m => m.id === 's').memberNo, '12');
+  await assert.rejects(f.members.saveMemberOverride('n', { memberNo: '12' }));
+  await assert.rejects(f.members.saveMemberOverride('n', { memberNo: ' ' }));
 });
 
 test('CSV batch validation prevents partial writes and rejects blank fields', async () => {

@@ -10,8 +10,10 @@ export function reconcileTableMembers(tables: AssignmentTable[], members: Member
     return number && name ? JSON.stringify([number, name]) : null;
   };
   for (const member of members) {
-    const key = identity(member);
-    if (key) index.set(key, [...(index.get(key) ?? []), member]);
+    for (const number of new Set([member.memberNo, ...(member.previousMemberNumbers ?? [])])) {
+      const key = identity({ ...member, memberNo: number });
+      if (key) index.set(key, [...(index.get(key) ?? []), member]);
+    }
   }
   const currentIds = new Set(members.map((member) => member.id));
   const unresolved = new Set<string>();

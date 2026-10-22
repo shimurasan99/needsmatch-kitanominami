@@ -1,13 +1,14 @@
 import type { Member } from "@/types/domain";
+import { members as initialMembers } from "@/lib/data/mock";
 import { fetchSharedState, updateSharedState } from "@/lib/data/shared-state";
 
 export const MEMBER_OVERRIDES_KEY = "nm_member_overrides";
 export const MEMBER_ADDITIONS_KEY = "nm_member_additions";
 export const MEMBER_DELETIONS_KEY = "nm_member_deletions";
 
-export type MemberEditableFields = Pick<Member, "name" | "kana" | "company" | "bio" | "status" | "isVisible" | "profileImageUrl" | "position" | "isTableLeader" | "industry" | "majorIndustry" | "facebookUrl" | "instagramUrl" | "websiteUrl">;
+export type MemberEditableFields = Pick<Member, "memberNo" | "name" | "kana" | "company" | "bio" | "status" | "isVisible" | "profileImageUrl" | "position" | "isTableLeader" | "industry" | "majorIndustry" | "facebookUrl" | "instagramUrl" | "websiteUrl">;
 
-export type MemberOverrides = Record<string, Partial<MemberEditableFields>>;
+export type MemberOverrides = Record<string, Partial<MemberEditableFields> & Pick<Member, "previousMemberNumbers">>;
 type SharedMembers = { additions: Member[]; overrides: MemberOverrides; deletions: string[] };
 
 export function applyMemberOverrides(members: Member[], overrides: MemberOverrides): Member[] {
@@ -101,7 +102,18 @@ export async function saveMemberOverride(memberId: string, values: Partial<Membe
   const next = await updateSharedState<SharedMembers>("members", (shared) => {
     const current = shared ?? emptySharedMembers();
     if (current.deletions.includes(memberId)) throw new Error("この会員は削除されています。会員一覧を再読み込みしてください。");
-    return { ...current, overrides: { ...current.overrides, [memberId]: { ...(current.overrides[memberId] ?? {}), ...values } } };
+    const changes: MemberOverrides[string] = { ...values };
+    if (values.memberNo !== undefined) {
+      const number = values.memberNo.trim();
+      if (!number || number.length > 40) throw new Error("会員番号を40文字以内で入力してください。");
+      const all = mergeMembers(initialMembers, current);
+      const member = all.find(m => m.id === memberId);
+      if (!member) throw new Error("会員が見つかりません。再読み込みしてください。");
+      if (number !== member.memberNo && all.some(m => m.id !== memberId && m.memberNo.trim() === number)) throw new Error(`会員No.${number}は既に使用されています。`);
+      changes.memberNo = number;
+      changes.previousMemberNumbers = [...new Set([...(member.previousMemberNumbers ?? []), member.memberNo].filter(n => n && n !== number))];
+    }
+    return { ...current, overrides: { ...current.overrides, [memberId]: { ...(current.overrides[memberId] ?? {}), ...changes } } };
   });
   cacheSharedMembers(next);
 }
